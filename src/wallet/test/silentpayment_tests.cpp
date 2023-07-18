@@ -49,12 +49,28 @@ BOOST_AUTO_TEST_CASE(bip352_send_and_receive_test_vectors)
             std::vector<COutPoint> outpoints;
             std::vector<std::pair<CKey, bool>> sender_secret_keys;
             for (const auto& input : given["vin"].getValues()) {
-                outpoints.emplace_back(TxidFromString(input["txid"].get_str()), input["vout"].getInt<uint32_t>());
+                COutPoint outpoint{TxidFromString(input["txid"].get_str()), input["vout"].getInt<uint32_t>()};
+                outpoints.push_back(outpoint);
                 const auto& spk_bytes = ParseHex(input["prevout"]["scriptPubKey"]["hex"].get_str());
                 CScript spk = CScript(spk_bytes.begin(), spk_bytes.end());
-                std::vector<std::vector<unsigned char>> solutions;
-                TxoutType type = Solver(spk, solutions);
-                sender_secret_keys.emplace_back(ParseHexToCKey(input["private_key"].get_str()), (type == TxoutType::WITNESS_V1_TAPROOT));
+                const auto& script_sig_bytes = ParseHex(input["scriptSig"].get_str());
+                CScript script_sig = CScript(script_sig_bytes.begin(), script_sig_bytes.end());
+                CTxIn txin{outpoint, script_sig};
+                CScriptWitness witness;
+                // read the field txWitness as a stream and write txWitness >> witness.stack;
+                auto witness_str = ParseHex(input["txinwitness"].get_str());
+                if (!witness_str.empty()) {
+                    SpanReader(witness_str) >> witness.stack;
+                    txin.scriptWitness = witness;
+                }
+
+                // check if this is a silent payment input by trying to extract the public key
+                auto pubkey = ExtractPubKeyFromInput(txin, spk);
+                if (pubkey.has_value()) {
+                    std::vector<std::vector<unsigned char>> solutions;
+                    TxoutType type = Solver(spk, solutions);
+                    sender_secret_keys.emplace_back(ParseHexToCKey(input["private_key"].get_str()), (type == TxoutType::WITNESS_V1_TAPROOT));
+                }
             }
 
             std::vector<CRecipient> silent_payment_addresses;

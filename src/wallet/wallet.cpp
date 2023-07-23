@@ -3782,6 +3782,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey&
     AssertLockHeld(cs_wallet);
     for (bool internal : {false, true}) {
         for (OutputType t : OUTPUT_TYPES) {
+            if (t == OutputType::SILENT_PAYMENT) continue;
             SetupDescriptorScriptPubKeyMan(batch, master_key, t, internal);
         }
     }

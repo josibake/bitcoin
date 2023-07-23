@@ -127,6 +127,8 @@ public:
     //! Negate private key
     bool Negate();
 
+    bool ApplyTapTweak(const uint256*, CKey&) const;
+
     /**
      * Convert the private key to a CPrivKey (serialized OpenSSL private key data).
      * This is expensive.

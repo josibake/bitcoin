@@ -21,6 +21,7 @@
 #include <util/rbf.h>
 #include <util/trace.h>
 #include <util/translation.h>
+#include <variant>
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
 #include <wallet/receive.h>
@@ -985,11 +986,23 @@ static void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng
 
 size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
+    if (std::holds_alternative<V0SilentPaymentDestination>(recipient.dest)) {
+        /* We don't have the actual script yet for the CTxOut but we know that it will be
+         * a WitnessV1Taproot script, so we can use that for the serialized size Calculation
+         */
+        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(WitnessV1Taproot())));
+    }
     return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
 }
 
 bool IsDust(const CRecipient& recipient, const CFeeRate& dustRelayFee)
 {
+    if (std::holds_alternative<V0SilentPaymentDestination>(recipient.dest)) {
+        /* We don't have the actual script yet for the CTxOut but we know that it will be
+         * a WitnessV1Taproot script, so we can use that for the serialized size Calculation
+         */
+        return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(WitnessV1Taproot())), dustRelayFee);
+    }
     return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)), dustRelayFee);
 }
 

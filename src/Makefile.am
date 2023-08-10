@@ -354,6 +354,7 @@ BITCOIN_CORE_H = \
   wallet/rpc/wallet.h \
   wallet/salvage.h \
   wallet/scriptpubkeyman.h \
+  wallet/silentpayments.h \
   wallet/spend.h \
   wallet/sqlite.h \
   wallet/transaction.h \
@@ -519,6 +520,7 @@ libbitcoin_wallet_a_SOURCES = \
   wallet/rpc/transactions.cpp \
   wallet/rpc/util.cpp \
   wallet/rpc/wallet.cpp \
+  wallet/silentpayments.cpp \
   wallet/scriptpubkeyman.cpp \
   wallet/spend.cpp \
   wallet/transaction.cpp \

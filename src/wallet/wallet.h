@@ -30,6 +30,7 @@
 #include <wallet/crypter.h>
 #include <wallet/db.h>
 #include <wallet/scriptpubkeyman.h>
+#include <wallet/silentpayments.h>
 #include <wallet/transaction.h>
 #include <wallet/types.h>
 #include <wallet/walletutil.h>
@@ -997,6 +998,9 @@ public:
 
     //! Instantiate a descriptor ScriptPubKeyMan from the WalletDescriptor and load it
     DescriptorScriptPubKeyMan& LoadDescriptorScriptPubKeyMan(uint256 id, WalletDescriptor& desc);
+
+    //! Instantion a silent payments spkm from existing data
+    void LoadSilentPaymentsSPKM(const uint256& id, const V0SilentPaymentDestination& dest, const CKey& scan_key, const CKey& spend_key, const std::vector<unsigned char>& spend_ckey, const std::vector<uint256>& tweaks, int64_t creation_time, int64_t labels_used);
 
     //! Adds the active ScriptPubKeyMan for the specified type and internal. Writes it to the wallet file
     //! @param[in] id The unique id for the ScriptPubKeyMan

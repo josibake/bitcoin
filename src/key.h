@@ -63,11 +63,6 @@ private:
         if (!keydata) keydata = make_secure_unique<KeyType>();
     }
 
-    void ClearKeyData()
-    {
-        keydata.reset();
-    }
-
 public:
     CKey() noexcept = default;
     CKey(CKey&&) noexcept = default;
@@ -107,6 +102,10 @@ public:
         } else {
             ClearKeyData();
         }
+    }
+    void ClearKeyData()
+    {
+        keydata.reset();
     }
 
     //! Simple read-only vector-like interface.

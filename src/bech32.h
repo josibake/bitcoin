@@ -36,6 +36,7 @@ enum CharLimit : size_t {
     NO_LIMIT = 0,           //!< Allows for Bech32(m) encoded strings of arbitrary size. No guarantees on the number of errors detected
 
     SEGWIT = 90,            //!< BIP173/350 imposed 90 character limit on Bech32(m) encoded addresses. This guarantees finding up to 4 errors
+    SILENT_PAYMENTS = 1024, //!< BIP352 imposed 1024 character limit on Bech32m encoded silent payment addresses. This guarantees finding up to 3 errors
 };
 
 /** Encode a Bech32 or Bech32m string. If hrp contains uppercase characters, this will cause an

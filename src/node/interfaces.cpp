@@ -53,6 +53,7 @@
 #include <sync.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <undo.h>
 #include <univalue.h>
 #include <util/check.h>
 #include <util/result.h>
@@ -445,6 +446,10 @@ bool FillBlock(const CBlockIndex* index, const FoundBlock& block, UniqueLock<Rec
     if (block.m_data) {
         REVERSE_LOCK(lock);
         if (!blockman.ReadBlock(*block.m_data, *index)) block.m_data->SetNull();
+    }
+    if (block.m_undo) {
+        REVERSE_LOCK(lock);
+        if (!blockman.ReadBlockUndo(*block.m_undo, *index)) block.m_undo->vtxundo.clear();
     }
     block.found = true;
     return true;

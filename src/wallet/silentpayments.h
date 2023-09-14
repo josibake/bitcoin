@@ -175,4 +175,3 @@ CPubKey SumInputPubKeys(const std::vector<CPubKey>& input_pubkeys);
 
 } // namespace wallet
 #endif // BITCOIN_WALLET_SILENTPAYMENTS_H
-

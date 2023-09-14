@@ -135,6 +135,53 @@ std::map<size_t, WitnessV1Taproot> GenerateSilentPaymentTaprootDestinations(cons
     return tr_dests;
 }
 
+std::optional<CPubKey> ExtractPubKeyFromInput(const CTxIn& txin, const CScript& spk)
+{
+    std::vector<std::vector<unsigned char>> solutions;
+    TxoutType type = Solver(spk, solutions);
+    if (type == TxoutType::WITNESS_V1_TAPROOT) {
+        // Check for H point in script path spend
+        if (txin.scriptWitness.stack.size() > 1) {
+            // Check for annex
+            bool has_annex = txin.scriptWitness.stack.back()[0] == ANNEX_TAG;
+            size_t post_annex_size = txin.scriptWitness.stack.size() - (has_annex ? 1 : 0);
+            if (post_annex_size > 1) {
+                // Actually a script path spend
+                const std::vector<unsigned char>& control = txin.scriptWitness.stack.at(post_annex_size - 1);
+                Assert(control.size() >= 33);
+                if (std::equal(NUMS_H.begin(), NUMS_H.end(), control.begin() + 1)) {
+                    // Skip script path with H internal key
+                    return std::nullopt;
+                }
+            }
+        }
+
+        std::vector<unsigned char> pubkey;
+        pubkey.resize(33);
+        pubkey[0] = 0x02;
+        std::copy(solutions[0].begin(), solutions[0].end(), pubkey.begin() + 1);
+        return CPubKey{pubkey};
+    } else if (type == TxoutType::WITNESS_V0_KEYHASH) {
+        return CPubKey{txin.scriptWitness.stack.back()};
+    } else if (type == TxoutType::PUBKEYHASH || type == TxoutType::SCRIPTHASH) {
+        // Use the script interpreter to get the stack after executing the scriptSig
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError serror;
+        Assert(EvalScript(stack, txin.scriptSig, MANDATORY_SCRIPT_VERIFY_FLAGS, DUMMY_CHECKER, SigVersion::BASE, &serror));
+        if (type == TxoutType::PUBKEYHASH) {
+            return CPubKey{stack.back()};
+        } else if (type == TxoutType::SCRIPTHASH) {
+            // Check if the redeemScript is P2WPKH
+            CScript redeem_script{stack.back().begin(), stack.back().end()};
+            TxoutType rs_type = Solver(redeem_script, solutions);
+            if (rs_type == TxoutType::WITNESS_V0_KEYHASH) {
+                return CPubKey{txin.scriptWitness.stack.back()};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<uint256> GetTxOutputTweaks(const CPubKey& spend_pubkey, const CPubKey& ecdh_pubkey, std::vector<XOnlyPubKey> output_pub_keys, const std::map<CPubKey, uint256>& labels)
 {
     // Because a sender can create multiple outputs for us, we first check the outputs vector for an output with
@@ -240,50 +287,9 @@ std::optional<std::pair<uint256, CPubKey>> GetSilentPaymentTweakDataFromTxInputs
         const Coin& coin = coins.at(txin.prevout);
         Assert(!coin.IsSpent());
         input_outpoints.emplace_back(txin.prevout);
-
-        std::vector<std::vector<unsigned char>> solutions;
-        TxoutType type = Solver(coin.out.scriptPubKey, solutions);
-        if (type == TxoutType::WITNESS_V1_TAPROOT) {
-            // Check for H point in script path spend
-            if (txin.scriptWitness.stack.size() > 1) {
-                // Check for annex
-                bool has_annex = txin.scriptWitness.stack.back()[0] == ANNEX_TAG;
-                size_t post_annex_size = txin.scriptWitness.stack.size() - (has_annex ? 1 : 0);
-                if (post_annex_size > 1) {
-                    // Actually a script path spend
-                    const std::vector<unsigned char>& control = txin.scriptWitness.stack.at(post_annex_size - 1);
-                    Assert(control.size() >= 33);
-                    if (std::equal(NUMS_H.begin(), NUMS_H.end(), control.begin() + 1)) {
-                        // Skip script path with H internal key
-                        continue;
-                    }
-                }
-            }
-
-            std::vector<unsigned char> pubkey;
-            pubkey.resize(33);
-            pubkey[0] = 0x02;
-            std::copy(solutions[0].begin(), solutions[0].end(), pubkey.begin() + 1);
-            input_pubkeys.emplace_back(pubkey);
-        } else if (type == TxoutType::WITNESS_V0_KEYHASH) {
-            input_pubkeys.emplace_back(txin.scriptWitness.stack.back());
-        } else if (type == TxoutType::PUBKEYHASH || type == TxoutType::SCRIPTHASH) {
-            // Use the script interpreter to get the stack after executing the scriptSig
-            std::vector<std::vector<unsigned char>> stack;
-            ScriptError serror;
-            Assert(EvalScript(stack, txin.scriptSig, MANDATORY_SCRIPT_VERIFY_FLAGS, DUMMY_CHECKER, SigVersion::BASE, &serror));
-            if (type == TxoutType::PUBKEYHASH) {
-                input_pubkeys.emplace_back(stack.back());
-            } else if (type == TxoutType::SCRIPTHASH) {
-                // Check if the redeemScript is P2WPKH
-                CScript redeem_script{stack.back().begin(), stack.back().end()};
-                TxoutType rs_type = Solver(redeem_script, solutions);
-                if (rs_type == TxoutType::WITNESS_V0_KEYHASH) {
-                    input_pubkeys.emplace_back(txin.scriptWitness.stack.back());
-                }
-            }
-        } else if (type == TxoutType::PUBKEY) {
-            input_pubkeys.emplace_back(solutions[0]);
+        auto pubkey = ExtractPubKeyFromInput(txin, coin.out.scriptPubKey);
+        if (pubkey.has_value()) {
+            input_pubkeys.push_back(*pubkey);
         }
     }
     if (input_pubkeys.size() == 0) return std::nullopt;

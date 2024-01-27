@@ -5,6 +5,7 @@
 #ifndef BITCOIN_BLOCKFILTER_H
 #define BITCOIN_BLOCKFILTER_H
 
+#include "serialize.h"
 #include <cstddef>
 #include <cstdint>
 #include <ios>
@@ -12,11 +13,13 @@
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <attributes.h>
 #include <uint256.h>
 #include <util/bytevectorhash.h>
+#include <pubkey.h>
 
 class CBlock;
 class CBlockUndo;
@@ -86,12 +89,39 @@ public:
     bool MatchAny(const ElementSet& elements) const;
 };
 
+class InputsFilter {
+public:
+    typedef CPubKey Element;
+    typedef std::vector<Element> ElementSet;
+
+private:
+    uint32_t m_N;  //!< Number of elements in the filter
+    std::vector<unsigned char> m_encoded;   // Encoded block of bytes
+
+public:
+    /** Constructs an empty filter. */
+    explicit InputsFilter();
+
+    /** Reconstructs an already-created filter from an encoding. */
+    InputsFilter(std::vector<unsigned char> encoded_filter, bool skip_decode_check);
+
+    /** Builds a new filter from the params and set of elements. */
+    InputsFilter(const ElementSet& elements);
+
+    uint32_t GetN() const { return m_N; }
+
+    /** Returns the encoded data */
+    const std::vector<unsigned char>& GetEncoded() const LIFETIMEBOUND { return m_encoded; }
+};
+
+using Filter = std::variant<GCSFilter, InputsFilter>;
 constexpr uint8_t BASIC_FILTER_P = 19;
 constexpr uint32_t BASIC_FILTER_M = 784931;
 
 enum class BlockFilterType : uint8_t
 {
     BASIC = 0,
+    SILENT_PAYMENTS = 1,
     INVALID = 255,
 };
 
@@ -116,7 +146,7 @@ class BlockFilter
 private:
     BlockFilterType m_filter_type = BlockFilterType::INVALID;
     uint256 m_block_hash;
-    GCSFilter m_filter;
+    Filter m_filter;
 
     bool BuildParams(GCSFilter::Params& params) const;
 
@@ -133,11 +163,11 @@ public:
 
     BlockFilterType GetFilterType() const { return m_filter_type; }
     const uint256& GetBlockHash() const LIFETIMEBOUND { return m_block_hash; }
-    const GCSFilter& GetFilter() const LIFETIMEBOUND { return m_filter; }
+    const Filter& GetFilter() const LIFETIMEBOUND { return m_filter; }
 
     const std::vector<unsigned char>& GetEncodedFilter() const LIFETIMEBOUND
     {
-        return m_filter.GetEncoded();
+        return std::visit([](const auto& f) -> const std::vector<unsigned char>& { return f.GetEncoded(); }, m_filter);
     }
 
     //! Compute the filter hash.
@@ -150,7 +180,7 @@ public:
     void Serialize(Stream& s) const {
         s << static_cast<uint8_t>(m_filter_type)
           << m_block_hash
-          << m_filter.GetEncoded();
+          << std::visit([](const auto& f) { return f.GetEncoded(); }, m_filter);
     }
 
     template <typename Stream>
@@ -168,7 +198,16 @@ public:
         if (!BuildParams(params)) {
             throw std::ios_base::failure("unknown filter_type");
         }
-        m_filter = GCSFilter(params, std::move(encoded_filter), /*skip_decode_check=*/false);
+        switch (m_filter_type) {
+        case BlockFilterType::BASIC:
+            m_filter = GCSFilter(params, std::move(encoded_filter), /*skip_decode_check=*/false);
+            break;
+        case BlockFilterType::SILENT_PAYMENTS:
+            m_filter = InputsFilter(std::move(encoded_filter), /*skip_decode_check=*/false);
+            break;
+        case BlockFilterType::INVALID:
+            throw std::ios_base::failure("unknown filter_type");
+        }
     }
 };
 

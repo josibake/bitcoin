@@ -30,7 +30,7 @@ FUZZ_TARGET(blockfilter)
         (void)BlockFilterTypeName(block_filter_type);
     }
     {
-        const GCSFilter gcs_filter = block_filter->GetFilter();
+        const GCSFilter gcs_filter = std::get<GCSFilter>(block_filter->GetFilter());
         (void)gcs_filter.GetN();
         (void)gcs_filter.GetParams();
         (void)gcs_filter.GetEncoded();

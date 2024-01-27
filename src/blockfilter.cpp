@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <cstddef>
 #include <mutex>
 #include <set>
 
@@ -15,9 +16,13 @@
 #include <undo.h>
 #include <util/golombrice.h>
 #include <util/string.h>
+#include <wallet/silentpayments.h>
+#include <script/solver.h>
+#include <logging.h>
 
 static const std::map<BlockFilterType, std::string> g_filter_types = {
     {BlockFilterType::BASIC, "basic"},
+    {BlockFilterType::SILENT_PAYMENTS, "silent-payments"},
 };
 
 uint64_t GCSFilter::HashToRange(const Element& element) const
@@ -142,6 +147,45 @@ bool GCSFilter::MatchAny(const ElementSet& elements) const
     return MatchInternal(queries.data(), queries.size());
 }
 
+InputsFilter::InputsFilter()
+    : m_N(0), m_encoded{0}
+{}
+
+InputsFilter::InputsFilter(const ElementSet& elements)
+{
+    size_t N = elements.size();
+    m_N = static_cast<uint32_t>(N);
+    if (m_N != N) {
+        throw std::invalid_argument("N must be <2^32");
+    }
+    VectorWriter stream{m_encoded, 0};
+    WriteCompactSize(stream, m_N * 33);
+    if (elements.empty()) {
+        return;
+    }
+    for (const Element& e: elements) {
+        stream.write(MakeByteSpan(e));
+    }
+}
+
+InputsFilter::InputsFilter(std::vector<unsigned char> encoded_filter, bool skip_decode_check)
+    : m_encoded(std::move(encoded_filter))
+{
+    SpanReader stream{m_encoded};
+
+    uint64_t N = ReadCompactSize(stream);
+    m_N = static_cast<uint32_t>(N) / 33;
+    if (m_N != (N / 33)) {
+        throw std::ios_base::failure("N must be <2^32");
+    }
+    if (skip_decode_check) return;
+    // Verify that the encoded filter contains exactly N elements. If it has too much or too little
+    // data, a std::ios_base::failure exception will be raised.
+    if (stream.size() != m_N * 33) {
+        throw std::ios_base::failure("encoded_filter contains excess data");
+    }
+}
+
 const std::string& BlockFilterTypeName(BlockFilterType filter_type)
 {
     static std::string unknown_retval;
@@ -204,6 +248,39 @@ static GCSFilter::ElementSet BasicFilterElements(const CBlock& block,
     return elements;
 }
 
+static InputsFilter::ElementSet SilentPaymentFilterElements(const CBlock& block,
+                                                 const CBlockUndo& block_undo)
+{
+    InputsFilter::ElementSet elements;
+    if (block_undo.vtxundo.empty()) return elements;
+    assert(block.vtx.size() - 1 == block_undo.vtxundo.size());
+    for (uint32_t i = 0; i < block.vtx.size(); ++i) {
+        const CTransactionRef& tx = block.vtx.at(i);
+        if (tx->IsCoinBase()) continue;
+        if (std::none_of(tx->vout.begin(), tx->vout.end(), [](const CTxOut& txout) {
+            std::vector<std::vector<unsigned char>> solutions;
+            return Solver(txout.scriptPubKey, solutions) == TxoutType::WITNESS_V1_TAPROOT;
+        })) {
+            continue;
+        }
+        // -1 as blockundo does not have coinbase tx
+        CTxUndo undoTX{block_undo.vtxundo.at(i - 1)};
+        std::map<COutPoint, Coin> coins;
+        for (uint32_t j = 0; j < tx->vin.size(); j++) {
+            coins[tx->vin.at(j).prevout] = undoTX.vprevout.at(j);
+        }
+        auto tweak_data = wallet::GetSilentPaymentTweakDataFromTxInputs(tx->vin, coins);
+        if (!tweak_data.has_value()) continue;
+
+        CKey inputs_hash;
+        inputs_hash.Set(tweak_data->first.begin(), tweak_data->first.end(), true);
+        CPubKey input_pubkeys_sum{tweak_data->second};
+        CPubKey final{inputs_hash.UnhashedECDH(input_pubkeys_sum)};
+        elements.push_back(final);
+    }
+    return elements;
+}
+
 BlockFilter::BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
                          std::vector<unsigned char> filter, bool skip_decode_check)
     : m_filter_type(filter_type), m_block_hash(block_hash)
@@ -212,7 +289,16 @@ BlockFilter::BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
     if (!BuildParams(params)) {
         throw std::invalid_argument("unknown filter_type");
     }
-    m_filter = GCSFilter(params, std::move(filter), skip_decode_check);
+    switch (m_filter_type) {
+        case BlockFilterType::BASIC:
+            m_filter = GCSFilter(params, std::move(filter), skip_decode_check);
+            break;
+        case BlockFilterType::SILENT_PAYMENTS:
+            m_filter = InputsFilter(std::move(filter), skip_decode_check);
+            break;
+        case BlockFilterType::INVALID:
+            throw std::invalid_argument("unknown filter_type");
+    }
 }
 
 BlockFilter::BlockFilter(BlockFilterType filter_type, const CBlock& block, const CBlockUndo& block_undo)
@@ -222,7 +308,16 @@ BlockFilter::BlockFilter(BlockFilterType filter_type, const CBlock& block, const
     if (!BuildParams(params)) {
         throw std::invalid_argument("unknown filter_type");
     }
-    m_filter = GCSFilter(params, BasicFilterElements(block, block_undo));
+    switch (m_filter_type) {
+        case BlockFilterType::BASIC:
+            m_filter = GCSFilter(params, BasicFilterElements(block, block_undo));
+            break;
+        case BlockFilterType::SILENT_PAYMENTS:
+            m_filter = InputsFilter(SilentPaymentFilterElements(block, block_undo));
+            break;
+        case BlockFilterType::INVALID:
+            throw std::invalid_argument("unknown filter_type");
+    }
 }
 
 bool BlockFilter::BuildParams(GCSFilter::Params& params) const
@@ -233,6 +328,8 @@ bool BlockFilter::BuildParams(GCSFilter::Params& params) const
         params.m_siphash_k1 = m_block_hash.GetUint64(1);
         params.m_P = BASIC_FILTER_P;
         params.m_M = BASIC_FILTER_M;
+        return true;
+    case BlockFilterType::SILENT_PAYMENTS:
         return true;
     case BlockFilterType::INVALID:
         return false;

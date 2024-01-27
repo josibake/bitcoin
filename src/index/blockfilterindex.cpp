@@ -14,6 +14,7 @@
 #include <undo.h>
 #include <util/fs_helpers.h>
 #include <validation.h>
+#include <chainparams.h>
 
 /* The index database stores three items for each block: the disk location of the encoded filter,
  * its dSHA256 hash, and the header. Those belonging to blocks on the active chain are indexed by

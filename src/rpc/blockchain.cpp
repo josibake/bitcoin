@@ -2442,7 +2442,7 @@ static RPCHelpMan scanblocks()
             if (index->LookupFilterRange(start_block, end_range, filters)) {
                 for (const BlockFilter& filter : filters) {
                     // compare the elements-set with each filter
-                    if (filter.GetFilter().MatchAny(needle_set)) {
+                    if (std::get<GCSFilter>(filter.GetFilter()).MatchAny(needle_set)) {
                         if (filter_false_positives) {
                             // Double check the filter matches by scanning the block
                             const CBlockIndex& blockindex = *CHECK_NONFATAL(WITH_LOCK(cs_main, return chainman.m_blockman.LookupBlockIndex(filter.GetBlockHash())));

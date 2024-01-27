@@ -3113,7 +3113,16 @@ bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
 
     return false;
 }
-
+bool IsSupportedFilter(BlockFilterType filter_type)
+{
+    switch (filter_type) {
+        case BlockFilterType::BASIC:
+        case BlockFilterType::SILENT_PAYMENTS:
+            return true;
+        default:
+            return false;
+    }
+}
 bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
                                                 BlockFilterType filter_type, uint32_t start_height,
                                                 const uint256& stop_hash, uint32_t max_height_diff,
@@ -3121,7 +3130,7 @@ bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
                                                 BlockFilterIndex*& filter_index)
 {
     const bool supported_filter_type =
-        (filter_type == BlockFilterType::BASIC &&
+        (IsSupportedFilter(filter_type) &&
          (peer.m_our_services & NODE_COMPACT_FILTERS));
     if (!supported_filter_type) {
         LogPrint(BCLog::NET, "peer %d requested unsupported block filter type: %d\n",

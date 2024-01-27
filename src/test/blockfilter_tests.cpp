@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     block_undo.vtxundo.back().vprevout.emplace_back(CTxOut(700, excluded_scripts[3]), 100000, false);
 
     BlockFilter block_filter(BlockFilterType::BASIC, block, block_undo);
-    const GCSFilter& filter = block_filter.GetFilter();
+    const GCSFilter& filter = std::get<GCSFilter>(block_filter.GetFilter());
 
     for (const CScript& script : included_scripts) {
         BOOST_CHECK(filter.Match(GCSFilter::Element(script.begin(), script.end())));
@@ -172,7 +172,7 @@ BOOST_AUTO_TEST_CASE(blockfilters_json_test)
         BOOST_CHECK(ParseHashStr(test[pos++].get_str(), filter_header_basic));
 
         BlockFilter computed_filter_basic(BlockFilterType::BASIC, block, block_undo);
-        BOOST_CHECK(computed_filter_basic.GetFilter().GetEncoded() == filter_basic);
+        BOOST_CHECK(computed_filter_basic.GetEncodedFilter() == filter_basic);
 
         uint256 computed_header_basic = computed_filter_basic.ComputeHeader(prev_filter_header_basic);
         BOOST_CHECK(computed_header_basic == filter_header_basic);

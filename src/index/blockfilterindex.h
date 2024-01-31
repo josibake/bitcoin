@@ -58,7 +58,7 @@ protected:
 public:
     /** Constructs the index, which becomes available to be queried. */
     explicit BlockFilterIndex(std::unique_ptr<interfaces::Chain> chain, BlockFilterType filter_type,
-                              size_t n_cache_size, bool f_memory = false, bool f_wipe = false);
+                              size_t n_cache_size, bool f_memory = false, bool f_wipe = false, int start_height = 0);
 
     BlockFilterType GetFilterType() const { return m_filter_type; }
 

@@ -98,8 +98,12 @@ struct DBHashKey {
 static std::map<BlockFilterType, BlockFilterIndex> g_filter_indexes;
 
 BlockFilterIndex::BlockFilterIndex(std::unique_ptr<interfaces::Chain> chain, BlockFilterType filter_type,
-                                   size_t n_cache_size, bool f_memory, bool f_wipe)
-    : BaseIndex(std::move(chain), BlockFilterTypeName(filter_type) + " block filter index")
+                                   size_t n_cache_size, bool f_memory, bool f_wipe, int start_height)
+    : BaseIndex(
+            std::move(chain),
+            BlockFilterTypeName(filter_type) + " block filter index",
+            start_height
+    )
     , m_filter_type(filter_type)
 {
     const std::string& filter_name = BlockFilterTypeName(filter_type);
@@ -220,7 +224,7 @@ bool BlockFilterIndex::CustomAppend(const interfaces::BlockInfo& block)
     CBlockUndo block_undo;
     uint256 prev_header;
 
-    if (block.height > 0) {
+    if (block.height > m_start_height) {
         // pindex variable gives indexing code access to node internals. It
         // will be removed in upcoming commit
         const CBlockIndex* pindex = WITH_LOCK(cs_main, return m_chainstate->m_blockman.LookupBlockIndex(block.hash));

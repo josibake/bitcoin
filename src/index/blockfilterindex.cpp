@@ -477,10 +477,15 @@ void ForEachBlockFilterIndex(std::function<void (BlockFilterIndex&)> fn)
 bool InitBlockFilterIndex(std::function<std::unique_ptr<interfaces::Chain>()> make_chain, BlockFilterType filter_type,
                           size_t n_cache_size, bool f_memory, bool f_wipe)
 {
+    int start_height = (
+            filter_type == BlockFilterType::SILENT_PAYMENTS ?
+            Params().GetConsensus().vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height : 0
+    );
     auto result = g_filter_indexes.emplace(std::piecewise_construct,
                                            std::forward_as_tuple(filter_type),
                                            std::forward_as_tuple(make_chain(), filter_type,
-                                                                 n_cache_size, f_memory, f_wipe));
+                                                                 n_cache_size, f_memory, f_wipe,
+                                                                 start_height));
     return result.second;
 }
 

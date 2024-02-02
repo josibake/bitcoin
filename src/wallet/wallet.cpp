@@ -2121,11 +2121,14 @@ bool CWallet::SignTransaction(CMutableTransaction& tx) const
 bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
 {
     // Try to sign with all ScriptPubKeyMans
-    for (ScriptPubKeyMan* spk_man : GetAllScriptPubKeyMans()) {
-        // spk_man->SignTransaction will return true if the transaction is complete,
-        // so we can exit early and return true if that happens
-        if (spk_man->SignTransaction(tx, coins, sighash, input_errors)) {
-            return true;
+    for (const CTxIn& tx_in : tx.vin) {
+        // Use the scriptPubKey cache to grab the correct set of SPKMan(s)
+        for (const ScriptPubKeyMan* spk_man : GetScriptPubKeyMans(coins.at(tx_in.prevout).out.scriptPubKey)) {
+            // spk_man->SignTransaction will return true if the transaction is complete,
+            // so we can exit early and return true if that happens
+            if (spk_man->SignTransaction(tx, coins, sighash, input_errors)) {
+                return true;
+            }
         }
     }
 

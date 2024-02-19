@@ -63,7 +63,9 @@ void run_silentpayments_tests(void) {
 
     unsigned char shared_secret_sender[33];
     unsigned char shared_secret_receiver[33];
+    unsigned char shared_secret_lightclient[33];
     secp256k1_pubkey public_keys_sum;
+    secp256k1_pubkey tweaked_public_key;
     unsigned char private_keys_sum[32];
     unsigned char input_hash1[32];
     unsigned char input_hash2[32];
@@ -72,7 +74,8 @@ void run_silentpayments_tests(void) {
     unsigned char output_calculated[32];
     unsigned char privkey_calculated[32];
     unsigned char privkey_expected[32];
-    secp256k1_silentpayments_output_data output_data;
+    int direct_match;
+    unsigned char t_k[32];
 
     /* convert raw key material into secp256k1 objects where necessary */
     secp256k1_pubkey input_pubkey_plain_obj, receiver_scan_pubkey_obj, receiver_spend_pubkey_obj;
@@ -98,6 +101,12 @@ void run_silentpayments_tests(void) {
     CHECK(secp256k1_silentpayments_create_shared_secret(CTX, shared_secret_receiver,
         &public_keys_sum, receiver_scan_privkey, input_hash2));
 
+    /* light client case */
+    CHECK(secp256k1_silentpayments_create_tweaked_pubkey(CTX, &tweaked_public_key, &public_keys_sum, input_hash2));
+    CHECK(secp256k1_silentpayments_create_shared_secret(CTX, shared_secret_lightclient,
+        &tweaked_public_key, receiver_scan_privkey, NULL));
+    CHECK(secp256k1_memcmp_var(shared_secret_receiver, shared_secret_lightclient, 33) == 0);
+
     CHECK(secp256k1_memcmp_var(input_hash1, input_hash2, 32) == 0);
     CHECK(secp256k1_memcmp_var(shared_secret_sender, shared_secret_receiver, 33) == 0);
 
@@ -107,14 +116,15 @@ void run_silentpayments_tests(void) {
     CHECK(secp256k1_xonly_pubkey_serialize(CTX, output_calculated, &output_calculated_xonly_obj));
     CHECK(secp256k1_memcmp_var(output_calculated, output_expected, 32) == 0);
 
-    CHECK(secp256k1_silentpayments_receiver_create_scanning_data(CTX, &output_data, NULL,
+    CHECK(secp256k1_silentpayments_receiver_scan_output(CTX, &direct_match, t_k, NULL,
         shared_secret_receiver, &receiver_spend_pubkey_obj, 0, &output_expected_xonly_obj));
+    CHECK(direct_match == 1);
 
     /* check that calculated silent payment output spending private key matches */
     memcpy(privkey_expected, receiver_spend_privkey, 32);
     CHECK(secp256k1_ec_seckey_tweak_add(CTX, privkey_expected, privkey_tweak_expected));
     CHECK(secp256k1_silentpayments_create_output_seckey(CTX, privkey_calculated,
-        receiver_spend_privkey, output_data.t_k, NULL));
+        receiver_spend_privkey, t_k, NULL));
     CHECK(secp256k1_memcmp_var(privkey_calculated, privkey_expected, 32) == 0);
 }
 

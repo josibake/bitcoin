@@ -147,6 +147,11 @@ for test_nr, test_vector in enumerate(test_vectors):
         scan_pubkey = secp256k1_glue.pubkey_serialize((secp256k1_glue.pubkey_create(scan_privkey)))
         spend_pubkey = secp256k1_glue.pubkey_serialize((secp256k1_glue.pubkey_create(spend_privkey)))
         shared_secret = secp256k1_glue.silentpayments_create_shared_secret(A_sum, scan_privkey, input_hash2)
+
+        A_tweaked = secp256k1_glue.silentpayments_create_tweaked_pubkey(A_sum, input_hash2)
+        shared_secret_lightclient = secp256k1_glue.silentpayments_create_shared_secret(A_tweaked, scan_privkey, None)
+        assert shared_secret == shared_secret_lightclient
+
         outputs_pubkeys_expected = [o['pub_key'] for o in receive_data_expected['outputs']]
         outputs_privtweaks_expected = [o['priv_key_tweak'] for o in receive_data_expected['outputs']]
         outputs_signatures_expected = [o['signature'] for o in receive_data_expected['outputs']]
@@ -168,13 +173,12 @@ for test_nr, test_vector in enumerate(test_vectors):
                 break
             for output_to_check in outputs_to_check:
                 found_sth = False
-                output_xonly_pubkey, t_k, label1, label2 = secp256k1_glue.silentpayments_receiver_create_scanning_data(shared_secret, spend_pubkey, k, bytes.fromhex(output_to_check))
-                if output_xonly_pubkey.hex() == output_to_check:
-                    outputs_to_check.remove(output_xonly_pubkey.hex())
-                    outputs_scanned.append(output_xonly_pubkey.hex())
+                direct_match, t_k, label1, label2 = secp256k1_glue.silentpayments_receiver_scan_output(shared_secret, spend_pubkey, k, bytes.fromhex(output_to_check))
+                if direct_match:
+                    outputs_to_check.remove(output_to_check)
+                    outputs_scanned.append(output_to_check)
                     outputs_privtweaks.append(t_k.hex())
-                    full_privkey = secp256k1_glue.silentpayments_create_output_seckey(
-                        spend_privkey, t_k)
+                    full_privkey = secp256k1_glue.silentpayments_create_output_seckey(spend_privkey, t_k)
                     outputs_signatures.append(secp256k1_glue.schnorrsig_sign32(
                         SIGN_MSG, full_privkey, AUX_MSG).hex())
                     k += 1

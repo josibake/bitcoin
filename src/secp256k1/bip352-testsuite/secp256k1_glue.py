@@ -219,6 +219,25 @@ def silentpayments_create_tweak_data(plain_pubkeys, xonly_pubkeys, outpoint_lowe
     return bytes(result_A_sum), bytes(result_input_hash)
 
 """
+int secp256k1_silentpayments_create_tweaked_pubkey(
+    const secp256k1_context *ctx,
+    secp256k1_pubkey *A_tweaked,
+    const secp256k1_pubkey *A_sum,
+    const unsigned char *input_hash
+);
+"""
+secplib.secp256k1_silentpayments_create_tweaked_pubkey.argtypes = [
+    c_voidp, c_voidp, c_voidp, c_voidp
+]
+secplib.secp256k1_silentpayments_create_tweaked_pubkey.restype = c_int
+def silentpayments_create_tweaked_pubkey(A_sum, input_hash):
+    result_tweaked_pubkey = create_string_buffer(SECP256K1_PUBKEY_STRUCT_SIZE)
+    retval = secplib.secp256k1_silentpayments_create_tweaked_pubkey(
+        secp_context, result_tweaked_pubkey, A_sum, input_hash)
+    assert retval == 1
+    return bytes(result_tweaked_pubkey)
+
+"""
 int secp256k1_silentpayments_create_shared_secret(
     const secp256k1_context *ctx,
     unsigned char *shared_secret33,
@@ -307,18 +326,14 @@ def silentpayments_sender_create_output_pubkey(shared_secret, receiver_spend_pub
 
 """
 typedef struct {
-    unsigned char t_k[32];
-    secp256k1_xonly_pubkey P_output_xonly;
-} secp256k1_silentpayments_output_data;
-
-typedef struct {
     secp256k1_pubkey label;
     secp256k1_pubkey label_negated;
 } secp256k1_silentpayments_label_data;
 
 int secp256k1_silentpayments_receiver_create_scanning_data(
     const secp256k1_context *ctx,
-    secp256k1_silentpayments_output_data *output_data,
+    int *direct_match,
+    unsigned char *t_k,
     secp256k1_silentpayments_label_data *label_data,
     const unsigned char *shared_secret33,
     const secp256k1_pubkey *receiver_spend_pubkey,
@@ -326,30 +341,30 @@ int secp256k1_silentpayments_receiver_create_scanning_data(
     const secp256k1_xonly_pubkey *tx_output
 );
 """
-secplib.secp256k1_silentpayments_receiver_create_scanning_data.argtypes = [
-    c_voidp, c_voidp, c_voidp, c_voidp, c_voidp, c_uint, c_voidp
+secplib.secp256k1_silentpayments_receiver_scan_output.argtypes = [
+    c_voidp, POINTER(c_int), c_voidp, c_voidp, c_voidp, c_voidp, c_uint, c_voidp
 ]
-secplib.secp256k1_silentpayments_receiver_create_scanning_data.restype = c_int
-def silentpayments_receiver_create_scanning_data(shared_secret, receiver_spend_pubkey, k, tx_output):
+secplib.secp256k1_silentpayments_receiver_scan_output.restype = c_int
+def silentpayments_receiver_scan_output(shared_secret, receiver_spend_pubkey, k, tx_output):
     # TODO: we are assuming here that the structs are packed, but i guess there is no guarantee?
-    result_output_data = create_string_buffer(32 + SECP256K1_XONLY_PUBKEY_STRUCT_SIZE)
     result_label_data = create_string_buffer(2 * SECP256K1_PUBKEY_STRUCT_SIZE)
+    result_t_k = create_string_buffer(32)
+    result_direct_match = c_int()
 
     receiver_spend_pubkey_obj = pubkey_parse(receiver_spend_pubkey)
     tx_output_obj = xonly_pubkey_parse(tx_output)
 
-    retval = secplib.secp256k1_silentpayments_receiver_create_scanning_data(
-        secp_context, result_output_data, result_label_data,
+    retval = secplib.secp256k1_silentpayments_receiver_scan_output(
+        secp_context, pointer(result_direct_match), result_t_k, result_label_data,
         shared_secret, receiver_spend_pubkey_obj, k, tx_output_obj)
     assert retval == 1
 
-    t_k, P_output_xonly = result_output_data[:32], xonly_pubkey_serialize(result_output_data[32:])
     label1, label2 = result_label_data[:64], result_label_data[64:]
 
-    if P_output_xonly != tx_output:
-        return P_output_xonly, t_k, pubkey_serialize(label1), pubkey_serialize(label2)
+    if result_direct_match:
+        return True, bytes(result_t_k), None, None
     else:
-        return P_output_xonly, t_k, None, None
+        return False, bytes(result_t_k), pubkey_serialize(label1), pubkey_serialize(label2)
 
 """
 int secp256k1_silentpayments_create_output_seckey(

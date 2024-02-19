@@ -140,6 +140,22 @@ int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *c
     return 1;
 }
 
+int secp256k1_silentpayments_create_tweaked_pubkey(const secp256k1_context *ctx, secp256k1_pubkey *A_tweaked, const secp256k1_pubkey *A_sum, const unsigned char *input_hash) {
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(A_tweaked != NULL);
+    ARG_CHECK(A_sum != NULL);
+    ARG_CHECK(input_hash != NULL);
+
+    /* Calculate A_tweaked = input_hash * A_sum */
+    *A_tweaked = *A_sum;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, A_tweaked, input_hash)) {
+        return 0;
+    }
+
+    return 1;
+}
+
 /* secp256k1_ecdh expects a hash function to be passed in or uses its default
  * hashing function. We don't want to hash the ECDH result, so we define a
  * custom function which simply returns the pubkey without hashing.
@@ -309,39 +325,43 @@ int secp256k1_silentpayments_sender_create_output_pubkey(const secp256k1_context
     return 1;
 }
 
-int secp256k1_silentpayments_receiver_create_scanning_data(const secp256k1_context *ctx, secp256k1_silentpayments_output_data *output_data, secp256k1_silentpayments_label_data *label_data, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k, const secp256k1_xonly_pubkey *tx_output) {
+int secp256k1_silentpayments_receiver_scan_output(const secp256k1_context *ctx, int *direct_match, unsigned char *t_k, secp256k1_silentpayments_label_data *label_data, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k, const secp256k1_xonly_pubkey *tx_output) {
     secp256k1_scalar t_k_scalar;
     secp256k1_ge P_output_ge;
+    secp256k1_xonly_pubkey P_output_xonly;
 
     /* Sanity check inputs */
     VERIFY_CHECK(ctx != NULL);
-    ARG_CHECK(output_data != NULL);
+    ARG_CHECK(direct_match != NULL);
+    ARG_CHECK(t_k != NULL);
     ARG_CHECK(shared_secret33 != NULL);
     ARG_CHECK(receiver_spend_pubkey != NULL);
     ARG_CHECK(tx_output != NULL);
 
     /* Calculate t_k = hash(shared_secret || ser_32(k)) */
     secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
-    secp256k1_scalar_get_b32(&output_data->t_k[0], &t_k_scalar);
+    secp256k1_scalar_get_b32(t_k, &t_k_scalar);
 
-    /* Calculate P_output_xonly = B_spend + t_k * G */
+    /* Calculate P_output = B_spend + t_k * G */
     secp256k1_pubkey_load(ctx, &P_output_ge, receiver_spend_pubkey);
     if (!secp256k1_eckey_pubkey_tweak_add(&P_output_ge, &t_k_scalar)) {
         return 0;
     }
-    secp256k1_xonly_pubkey_save(&output_data->P_output_xonly, &P_output_ge);
+
+    /* If the calculated output matches the one from the tx, we have a direct match and can
+     * return without labels calculation (one of the two would result in point of infinity) */
+    secp256k1_xonly_pubkey_save(&P_output_xonly, &P_output_ge);
+    if (secp256k1_xonly_pubkey_cmp(ctx, &P_output_xonly, tx_output) == 0) {
+        *direct_match = 1;
+        return 1;
+    }
+    *direct_match = 0;
 
     /* If desired, also calculate label candidates */
     if (label_data != NULL) {
         secp256k1_ge P_output_negated_ge, tx_output_ge;
         secp256k1_ge label_ge;
         secp256k1_gej label_gej;
-
-        /* If the calculated output matches the one from the tx, we don't need to
-           create the label candidates (one of the two would result in point of infinity) */
-        if (secp256k1_xonly_pubkey_cmp(ctx, &output_data->P_output_xonly, tx_output) == 0) {
-            return 1;
-        }
 
         /* Calculate negated P_output (common addend) first */
         secp256k1_ge_neg(&P_output_negated_ge, &P_output_ge);

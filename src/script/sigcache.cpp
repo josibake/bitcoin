@@ -6,6 +6,8 @@
 #include <script/sigcache.h>
 
 #include <crypto/sha256.h>
+#include <batchverify.h>
+#include <common/system.h>
 #include <logging.h>
 #include <pubkey.h>
 #include <random.h>
@@ -81,4 +83,13 @@ bool CachingTransactionSignatureChecker::VerifySchnorrSignature(Span<const unsig
     if (!TransactionSignatureChecker::VerifySchnorrSignature(sig, pubkey, sighash)) return false;
     if (store) m_signature_cache.Set(entry);
     return true;
+}
+
+bool BatchingCachingTransactionSignatureChecker::VerifySchnorrSignature(Span<const unsigned char> sig, const XOnlyPubKey& pubkey, const uint256& sighash) const
+{
+    uint256 entry;
+    signatureCache.ComputeEntrySchnorr(entry, sighash, sig, pubkey);
+    if (signatureCache.Get(entry, !GetStore())) return true;
+
+    return m_batch->Add(sig, pubkey, sighash);
 }

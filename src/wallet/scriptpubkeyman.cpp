@@ -1904,11 +1904,6 @@ std::optional<MigrationData> LegacyScriptPubKeyMan::MigrateToDescriptor()
         if (!desc->Expand(0, DUMMY_SIGNING_PROVIDER, scripts, keys)) {
             assert(false);
         }
-        std::set<CKeyID> privkeyids;
-        for (const auto& key_orig_pair : keys.origins) {
-            privkeyids.insert(key_orig_pair.first);
-        }
-
         std::vector<CScript> desc_spks;
 
         // Make the descriptor string with private keys
@@ -1924,12 +1919,14 @@ std::optional<MigrationData> LegacyScriptPubKeyMan::MigrateToDescriptor()
             // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
             WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
             auto desc_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(m_storage, w_desc, m_keypool_size));
-            for (const auto& keyid : privkeyids) {
+            for (const auto& keypair : keys.origins) {
                 CKey key;
-                if (!GetKey(keyid, key)) {
+                if (!GetKey(keypair.first, key)) {
                     continue;
                 }
-                WITH_LOCK(desc_spk_man->cs_desc_man, desc_spk_man->AddDescriptorKeyWithDB(batch, key, key.GetPubKey()));
+                // After checking that the key for a given keyid exists in mapKeys, we can get the pubkey directly from the
+                // keypair from the FlatSigningProvider, which avoids an expensive key.GetPubKey() call
+                WITH_LOCK(desc_spk_man->cs_desc_man, desc_spk_man->AddDescriptorKeyWithDB(batch, key, keypair.second.first));
             }
             desc_spk_man->TopUpWithDB(batch);
             auto desc_spks_set = desc_spk_man->GetScriptPubKeys();

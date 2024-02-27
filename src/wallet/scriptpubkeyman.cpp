@@ -1754,34 +1754,6 @@ std::optional<MigrationData> LegacyScriptPubKeyMan::MigrateToDescriptor()
 
     std::unordered_set<CScript, SaltedSipHasher> spks{GetScriptPubKeys()};
 
-    // Get all key ids
-    std::set<CKeyID> keyids;
-    for (const auto& key_pair : mapKeys) {
-        keyids.insert(key_pair.first);
-    }
-    for (const auto& key_pair : mapCryptedKeys) {
-        keyids.insert(key_pair.first);
-    }
-
-    // Get key metadata and figure out which keys don't have a seed
-    // Note that we do not ignore the seeds themselves because they are considered IsMine!
-    for (auto keyid_it = keyids.begin(); keyid_it != keyids.end();) {
-        const CKeyID& keyid = *keyid_it;
-        const auto& it = mapKeyMetadata.find(keyid);
-        if (it != mapKeyMetadata.end()) {
-            const CKeyMetadata& meta = it->second;
-            if (meta.hdKeypath == "s" || meta.hdKeypath == "m") {
-                keyid_it++;
-                continue;
-            }
-            if (m_hd_chain.seed_id == meta.hd_seed_id || m_inactive_hd_chains.count(meta.hd_seed_id) > 0) {
-                keyid_it = keyids.erase(keyid_it);
-                continue;
-            }
-        }
-        keyid_it++;
-    }
-
     WalletBatch batch(m_storage.GetDatabase());
     if (!batch.TxnBegin()) {
         LogPrintf("Error during descriptors migration, cannot initialize db transaction\n");
@@ -1789,27 +1761,34 @@ std::optional<MigrationData> LegacyScriptPubKeyMan::MigrateToDescriptor()
     }
 
     // keyids is now all non-HD keys. Each key will have its own combo descriptor
-    for (const CKeyID& keyid : keyids) {
-        CKey key;
-        if (!GetKey(keyid, key)) {
-            assert(false);
+    for (const auto& key_pair : mapKeys) {
+        uint64_t creation_time = 0;
+        const auto& it = mapKeyMetadata.find(key_pair.first);
+        if (it != mapKeyMetadata.end()) {
+            // Get key metadata and figure out which keys don't have a seed
+            // Note that we do not ignore the seeds themselves because they are considered IsMine!
+            const CKeyMetadata& meta = it->second;
+            if (m_hd_chain.seed_id == meta.hd_seed_id || m_inactive_hd_chains.count(meta.hd_seed_id) > 0) {
+                continue;
+            }
+            // Get birthdate from key meta
+            creation_time = it->second.nCreateTime;
         }
 
-        // Get birthdate from key meta
-        uint64_t creation_time = 0;
-        const auto& it = mapKeyMetadata.find(keyid);
-        if (it != mapKeyMetadata.end()) {
-            creation_time = it->second.nCreateTime;
+        CKey key;
+        if (!GetKey(key_pair.first, key)) {
+            assert(false);
         }
 
         // Get the key origin
         // Maybe this doesn't matter because floating keys here shouldn't have origins
         KeyOriginInfo info;
-        bool has_info = GetKeyOrigin(keyid, info);
+        bool has_info = GetKeyOrigin(key_pair.first, info);
         std::string origin_str = has_info ? "[" + HexStr(info.fingerprint) + FormatHDKeypath(info.path) + "]" : "";
 
         // Construct the combo descriptor
-        std::string desc_str = "combo(" + origin_str + HexStr(key.GetPubKey()) + ")";
+        CPubKey pubkey = key.GetPubKey();
+        std::string desc_str = "combo(" + origin_str + HexStr(pubkey) + ")";
         FlatSigningProvider keys;
         std::string error;
         std::unique_ptr<Descriptor> desc = Parse(desc_str, keys, error, false);
@@ -1817,7 +1796,54 @@ std::optional<MigrationData> LegacyScriptPubKeyMan::MigrateToDescriptor()
 
         // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
         auto desc_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(m_storage, w_desc, m_keypool_size));
-        WITH_LOCK(desc_spk_man->cs_desc_man, desc_spk_man->AddDescriptorKeyWithDB(batch, key, key.GetPubKey()));
+        WITH_LOCK(desc_spk_man->cs_desc_man, desc_spk_man->AddDescriptorKeyWithDB(batch, key, pubkey));
+        desc_spk_man->TopUpWithDB(batch);
+        auto desc_spks = desc_spk_man->GetScriptPubKeys();
+
+        // Remove the scriptPubKeys from our current set
+        for (const CScript& spk : desc_spks) {
+            size_t erased = spks.erase(spk);
+            assert(erased == 1);
+            assert(IsMine(spk) == ISMINE_SPENDABLE);
+        }
+
+        out.desc_spkms.push_back(std::move(desc_spk_man));
+    }
+    for (const auto& key_pair : mapCryptedKeys) {
+        uint64_t creation_time = 0;
+        const auto& it = mapKeyMetadata.find(key_pair.first);
+        if (it != mapKeyMetadata.end()) {
+            // Get key metadata and figure out which keys don't have a seed
+            // Note that we do not ignore the seeds themselves because they are considered IsMine!
+            const CKeyMetadata& meta = it->second;
+            if (m_hd_chain.seed_id == meta.hd_seed_id || m_inactive_hd_chains.count(meta.hd_seed_id) > 0) {
+                continue;
+            }
+            // Get birthdate from key meta
+            creation_time = it->second.nCreateTime;
+        }
+
+        CKey key;
+        if (!GetKey(key_pair.first, key)) {
+            assert(false);
+        }
+
+        // Get the key origin
+        // Maybe this doesn't matter because floating keys here shouldn't have origins
+        KeyOriginInfo info;
+        bool has_info = GetKeyOrigin(key_pair.first, info);
+        std::string origin_str = has_info ? "[" + HexStr(info.fingerprint) + FormatHDKeypath(info.path) + "]" : "";
+
+        // Construct the combo descriptor
+        std::string desc_str = "combo(" + origin_str + HexStr(key_pair.second.first) + ")";
+        FlatSigningProvider keys;
+        std::string error;
+        std::unique_ptr<Descriptor> desc = Parse(desc_str, keys, error, false);
+        WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+
+        // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
+        auto desc_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(m_storage, w_desc, m_keypool_size));
+        WITH_LOCK(desc_spk_man->cs_desc_man, desc_spk_man->AddDescriptorKeyWithDB(batch, key, key_pair.second.first));
         desc_spk_man->TopUpWithDB(batch);
         auto desc_spks = desc_spk_man->GetScriptPubKeys();
 

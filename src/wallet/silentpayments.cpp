@@ -56,11 +56,12 @@ SilentPaymentsSPKM::SilentPaymentsSPKM(WalletStorage& storage, int64_t labels_si
     }
     m_address.m_spend_pubkey = derived.key.GetPubKey();
     if (m_storage.HasEncryptionKeys()) {
+        std::vector<unsigned char> crypted_spend_key;
         CKeyingMaterial secret{UCharCast(derived.key.begin()), UCharCast(derived.key.end())};
-        std::vector<unsigned char> crypted_spend_key = m_spend_crypted_key;
         if (!m_storage.WithEncryptionKey([&](const CKeyingMaterial& encryption_key) { return EncryptSecret(encryption_key, secret, derived.key.GetPubKey().GetHash(), crypted_spend_key);})) {
             throw std::runtime_error("Unable to encrypt silent payments spend key");
         }
+        m_spend_crypted_key = crypted_spend_key;
     } else {
         m_spend_key = derived.key;
     }
@@ -151,8 +152,9 @@ bool SilentPaymentsSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
     assert(!m_spend_key.IsValid());
 
     CKey key;
-    if (!DecryptKey(master_key, m_spend_crypted_key, m_address.m_spend_pubkey, key)) {
-        LogPrintf("The wallet is probably corrupted: Unable to decrypt silent payments spend key");
+    std::vector<unsigned char> crypted_secret = m_spend_crypted_key;
+    CPubKey spend_pubkey = m_address.m_spend_pubkey;
+    if (!DecryptKey(master_key, crypted_secret, spend_pubkey, key)) {
         throw std::runtime_error("Error unlocking wallet: unable to decrypt silent payments spend key. Your wallet file may be corrupt.");
     }
     return true;
@@ -190,7 +192,12 @@ util::Result<CTxDestination> SilentPaymentsSPKM::GetReservedDestination(const Ou
 
 bool SilentPaymentsSPKM::TopUp(unsigned int size)
 {
-    // Nothing to do here
+    LOCK(cs_sp_man);
+    std::set<CScript> new_spks;
+    for (const auto& spk : m_spk_tweaks) {
+        new_spks.emplace(spk.first);
+    }
+    m_storage.TopUpCallback(new_spks, this);
     return true;
 }
 

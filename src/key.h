@@ -127,6 +127,7 @@ public:
     //! Negate private key
     bool Negate();
 
+    bool TweakAdd(const unsigned char *tweak32);
     bool ApplyTapTweak(const uint256*, CKey&) const;
 
     /**

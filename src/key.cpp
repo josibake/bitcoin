@@ -172,6 +172,13 @@ bool CKey::Negate()
     return secp256k1_ec_seckey_negate(secp256k1_context_sign, keydata->data());
 }
 
+bool CKey::TweakAdd(const unsigned char *tweak32)
+{
+    assert(keydata);
+    // Modify the current CKey's data directly.
+    return secp256k1_ec_seckey_tweak_add(secp256k1_context_sign, keydata->data(), tweak32);
+}
+
 bool CKey::ApplyTapTweak(const uint256* merkle_root, CKey& key) const
 {
     secp256k1_keypair keypair;

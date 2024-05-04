@@ -736,8 +736,6 @@ private:
         /** Whether the transaction(s) would replace any mempool transactions and/or evict any siblings.
          * If so, RBF rules apply. */
         bool m_rbf{false};
-        /** The coins that were spent by the transaction(s) being validated */
-        std::map<COutPoint, Coin> m_spent_coins;
         /** All directly conflicting mempool transactions and their descendants. */
         CTxMemPool::setEntries m_all_conflicts;
         /** Mempool transactions that were replaced. */
@@ -750,6 +748,8 @@ private:
     };
 
     struct SubPackageState m_subpackage;
+    /** The coins that were spent by the transaction(s) being validated */
+    std::map<COutPoint, Coin> m_spent_coins;
 
     /** Re-set sub-package state to not leak between evaluations */
     void ClearSubPackageState() EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs)

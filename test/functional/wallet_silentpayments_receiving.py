@@ -20,6 +20,43 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.skip_if_no_wallet()
         self.skip_if_no_sqlite()
 
+    def test_encrypt_and_decrypt(self):
+        self.log.info("Check that a silent payments wallet can be encrypted and decrypted")
+        self.log.info("Create encrypted wallet")
+        self.nodes[0].createwallet(wallet_name="sp_encrypted", passphrase="unsigned integer", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("sp_encrypted")
+        addr = wallet.getnewaddress(address_type="silent-payment")
+        self.def_wallet.sendtoaddress(addr, 10)
+        self.generate(self.nodes[0], 1)
+        self.log.info("Check that we can scan without the wallet being unlocked")
+        assert_equal(wallet.getbalance(), 10)
+        self.log.info("Check that we get an error if trying to send with the wallet locked")
+        assert_raises_rpc_error(-13, "Error: Please enter the wallet passphrase with walletpassphrase first.", wallet.sendtoaddress, addr, 9)
+        wallet.walletpassphrase(passphrase="unsigned integer", timeout=3)
+        self.log.info("Unlock wallet and send")
+        wallet.sendtoaddress(addr, 9)
+        self.generate(self.nodes[0], 1)
+        assert_approx(wallet.getbalance(), 10, 0.0001)
+
+    def test_encrypting_unencrypted(self):
+        self.log.info("Check that a silent payments wallet can be encrypted after creation")
+        self.log.info("Create un-encrypted wallet")
+        self.nodes[0].createwallet(wallet_name="sp_unencrypted", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("sp_unencrypted")
+        addr = wallet.getnewaddress(address_type="silent-payment")
+        self.def_wallet.sendtoaddress(addr, 10)
+        self.generate(self.nodes[0], 1)
+        assert_equal(wallet.getbalance(), 10)
+        self.log.info("Add a passphrase to the wallet")
+        wallet.encryptwallet(passphrase="unsigned integer")
+        self.log.info("Check that we get an error if trying to send with the wallet locked")
+        assert_raises_rpc_error(-13, "Error: Please enter the wallet passphrase with walletpassphrase first.", wallet.sendtoaddress, addr, 9)
+        wallet.walletpassphrase(passphrase="unsigned integer", timeout=3)
+        self.log.info("Unlock wallet and send")
+        wallet.sendtoaddress(addr, 9)
+        self.generate(self.nodes[0], 1)
+        assert_approx(wallet.getbalance(), 10, 0.0001)
+
     def test_createwallet(self):
         self.log.info("Check createwallet silent payments option")
 
@@ -69,6 +106,8 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 101)
 
         self.test_createwallet()
+        self.test_encrypt_and_decrypt()
+        self.test_encrypting_unencrypted()
         self.test_basic()
 
 

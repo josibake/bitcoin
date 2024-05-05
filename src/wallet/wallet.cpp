@@ -4568,11 +4568,22 @@ std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
 
 size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
-    return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
+    // A Silent Payements address is instructions on how to create a WitnessV1Taproot output
+    // Luckily, we know exactly how big a single WitnessV1Taproot output is, so return the serialization for that
+    // For everything else, convert it to a CTxOut and get the serialized size
+    if (std::get_if<V0SilentPaymentDestination>(&recipient.dest) != nullptr) {
+        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(WitnessV1Taproot())));
+    } else {
+        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
+    }
 }
 
 bool IsDust(const CRecipient& recipient, const CFeeRate& dustRelayFee)
 {
-    return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)), dustRelayFee);
+    if (std::get_if<V0SilentPaymentDestination>(&recipient.dest) != nullptr) {
+        return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(WitnessV1Taproot())), dustRelayFee);
+    } else {
+        return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)), dustRelayFee);
+    }
 }
 } // namespace wallet

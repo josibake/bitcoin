@@ -4560,7 +4560,15 @@ std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
 size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
     return std::visit([&recipient](auto&& dest) -> size_t {
-        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(dest)));
+        using T = std::decay_t<decltype(dest)>;
+        // A Silent Payements address is instructions on how to create a WitnessV1Taproot output
+        // Luckily, we know exactly how big a single WitnessV1Taproot output is, so return the serialization for that
+        // For everything else, convert it to a CTxOut and get the serialized size
+        if constexpr (std::is_same_v<T, V0SilentPaymentDestination>) {
+            return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(WitnessV1Taproot())));
+        } else {
+            return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(dest)));
+        }
     }, recipient.dest);
 }
 } // namespace wallet

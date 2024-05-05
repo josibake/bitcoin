@@ -4556,4 +4556,11 @@ std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
     }
     return std::nullopt;
 }
+
+size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
+{
+    return std::visit([&recipient](auto&& dest) -> size_t {
+        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(dest)));
+    }, recipient.dest);
+}
 } // namespace wallet

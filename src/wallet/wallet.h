@@ -14,6 +14,7 @@
 #include <logging.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
+#include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <script/script.h>
@@ -292,6 +293,9 @@ struct CRecipient
     CAmount nAmount;
     bool fSubtractFeeFromAmount;
 };
+
+size_t GetSerializeSizeForRecipient(const CRecipient& recipient);
+bool IsDust(const CRecipient& recipient, const CFeeRate& dustRelayFee);
 
 class WalletRescanReserver; //forward declarations for ScanForWalletTransactions/RescanFromTime
 /**

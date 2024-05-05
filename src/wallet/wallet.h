@@ -293,6 +293,8 @@ struct CRecipient
     bool fSubtractFeeFromAmount;
 };
 
+size_t GetSerializeSizeForRecipient(const CRecipient& recipient);
+
 class WalletRescanReserver; //forward declarations for ScanForWalletTransactions/RescanFromTime
 /**
  * A CWallet maintains a set of transactions and balances, and provides the ability to create new transactions.

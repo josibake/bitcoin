@@ -188,6 +188,10 @@ AC_ARG_ENABLE(module_ellswift,
     AS_HELP_STRING([--enable-module-ellswift],[enable ElligatorSwift module [default=yes]]), [],
     [SECP_SET_DEFAULT([enable_module_ellswift], [yes], [yes])])
 
+AC_ARG_ENABLE(module_silentpayments,
+    AS_HELP_STRING([--enable-module-silentpayments],[enable Silent Payments module [default=no]]), [],
+    [SECP_SET_DEFAULT([enable_module_silentpayments], [no], [yes])])
+
 AC_ARG_ENABLE(external_default_callbacks,
     AS_HELP_STRING([--enable-external-default-callbacks],[enable external default callback functions [default=no]]), [],
     [SECP_SET_DEFAULT([enable_external_default_callbacks], [no], [no])])
@@ -213,13 +217,12 @@ AC_ARG_WITH([ecmult-window], [AS_HELP_STRING([--with-ecmult-window=SIZE|auto],
 )],
 [req_ecmult_window=$withval], [req_ecmult_window=auto])
 
-AC_ARG_WITH([ecmult-gen-precision], [AS_HELP_STRING([--with-ecmult-gen-precision=2|4|8|auto],
-[Precision bits to tune the precomputed table size for signing.]
-[The size of the table is 32kB for 2 bits, 64kB for 4 bits, 512kB for 8 bits of precision.]
-[A larger table size usually results in possible faster signing.]
-["auto" is a reasonable setting for desktop machines (currently 4). [default=auto]]
+AC_ARG_WITH([ecmult-gen-kb], [AS_HELP_STRING([--with-ecmult-gen-kb=2|22|86|auto],
+[The size of the precomputed table for signing in multiples of 1024 bytes (on typical platforms).]
+[Larger values result in possibly better signing/keygeneration performance at the cost of a larger table.]
+["auto" is a reasonable setting for desktop machines (currently 22). [default=auto]]
 )],
-[req_ecmult_gen_precision=$withval], [req_ecmult_gen_precision=auto])
+[req_ecmult_gen_kb=$withval], [req_ecmult_gen_kb=auto])
 
 AC_ARG_WITH([valgrind], [AS_HELP_STRING([--with-valgrind=yes|no|auto],
 [Build with extra checks for running inside Valgrind [default=auto]]
@@ -358,19 +361,25 @@ case $set_ecmult_window in
   ;;
 esac
 
-# Set ecmult gen precision
-if test x"$req_ecmult_gen_precision" = x"auto"; then
-  set_ecmult_gen_precision=4
+# Set ecmult gen kb
+if test x"$req_ecmult_gen_kb" = x"auto"; then
+  set_ecmult_gen_kb=22
 else
-  set_ecmult_gen_precision=$req_ecmult_gen_precision
+  set_ecmult_gen_kb=$req_ecmult_gen_kb
 fi
 
-case $set_ecmult_gen_precision in
-2|4|8)
-  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DECMULT_GEN_PREC_BITS=$set_ecmult_gen_precision"
+case $set_ecmult_gen_kb in
+2)
+  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DCOMB_BLOCKS=2 -DCOMB_TEETH=5"
+  ;;
+22)
+  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DCOMB_BLOCKS=11 -DCOMB_TEETH=6"
+  ;;
+86)
+  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DCOMB_BLOCKS=43 -DCOMB_TEETH=6"
   ;;
 *)
-  AC_MSG_ERROR(['ecmult gen precision not 2, 4, 8 or "auto"'])
+  AC_MSG_ERROR(['ecmult gen table size not 2, 22, 86 or "auto"'])
   ;;
 esac
 
@@ -389,6 +398,10 @@ SECP_CFLAGS="$SECP_CFLAGS $WERROR_CFLAGS"
 
 # Processing must be done in a reverse topological sorting of the dependency graph
 # (dependent module first).
+if test x"$enable_module_silentpayments" = x"yes"; then
+  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DENABLE_MODULE_SILENTPAYMENTS=1"
+fi
+
 if test x"$enable_module_ellswift" = x"yes"; then
   SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DENABLE_MODULE_ELLSWIFT=1"
 fi
@@ -450,6 +463,7 @@ AM_CONDITIONAL([ENABLE_MODULE_RECOVERY], [test x"$enable_module_recovery" = x"ye
 AM_CONDITIONAL([ENABLE_MODULE_EXTRAKEYS], [test x"$enable_module_extrakeys" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_SCHNORRSIG], [test x"$enable_module_schnorrsig" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_ELLSWIFT], [test x"$enable_module_ellswift" = x"yes"])
+AM_CONDITIONAL([ENABLE_MODULE_SILENTPAYMENTS], [test x"$enable_module_silentpayments" = x"yes"])
 AM_CONDITIONAL([USE_EXTERNAL_ASM], [test x"$enable_external_asm" = x"yes"])
 AM_CONDITIONAL([USE_ASM_ARM], [test x"$set_asm" = x"arm32"])
 AM_CONDITIONAL([BUILD_WINDOWS], [test "$build_windows" = "yes"])
@@ -472,10 +486,11 @@ echo "  module recovery         = $enable_module_recovery"
 echo "  module extrakeys        = $enable_module_extrakeys"
 echo "  module schnorrsig       = $enable_module_schnorrsig"
 echo "  module ellswift         = $enable_module_ellswift"
+echo "  module silentpayments   = $enable_module_silentpayments"
 echo
 echo "  asm                     = $set_asm"
 echo "  ecmult window size      = $set_ecmult_window"
-echo "  ecmult gen prec. bits   = $set_ecmult_gen_precision"
+echo "  ecmult gen table size   = $set_ecmult_gen_kb KiB"
 # Hide test-only options unless they're used.
 if test x"$set_widemul" != xauto; then
 echo "  wide multiplication     = $set_widemul"

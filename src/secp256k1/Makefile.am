@@ -64,6 +64,8 @@ noinst_HEADERS += src/field.h
 noinst_HEADERS += src/field_impl.h
 noinst_HEADERS += src/bench.h
 noinst_HEADERS += src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h
+noinst_HEADERS += src/hsort.h
+noinst_HEADERS += src/hsort_impl.h
 noinst_HEADERS += contrib/lax_der_parsing.h
 noinst_HEADERS += contrib/lax_der_parsing.c
 noinst_HEADERS += contrib/lax_der_privatekey_parsing.h
@@ -182,6 +184,17 @@ schnorr_example_LDFLAGS += -lbcrypt
 endif
 TESTS += schnorr_example
 endif
+if ENABLE_MODULE_SILENTPAYMENTS
+noinst_PROGRAMS += silentpayments_example
+silentpayments_example_SOURCES = examples/silentpayments.c
+silentpayments_example_CPPFLAGS = -I$(top_srcdir)/include -DSECP256K1_STATIC
+silentpayments_example_LDADD = libsecp256k1.la
+silentpayments_example_LDFLAGS = -static
+if BUILD_WINDOWS
+silentpayments_example_LDFLAGS += -lbcrypt
+endif
+TESTS += silentpayments_example
+endif
 endif
 
 ### Precomputed tables
@@ -270,4 +283,8 @@ endif
 
 if ENABLE_MODULE_ELLSWIFT
 include src/modules/ellswift/Makefile.am.include
+endif
+
+if ENABLE_MODULE_SILENTPAYMENTS
+include src/modules/silentpayments/Makefile.am.include
 endif

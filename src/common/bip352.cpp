@@ -201,7 +201,7 @@ std::vector<secp256k1_xonly_pubkey> CreateOutputs(
         plain_key_ptrs.push_back(UCharCast(key.begin()));
     }
     for (size_t i = 0; i < taproot_keys.size(); i++) {
-        taproot_keypair_ptrs.push_back((secp256k1_keypair *)taproot_keys[i]->m_data->data());
+        taproot_keypair_ptrs.push_back((secp256k1_keypair *)taproot_keys[i].m_keydata->data());
     }
 
     // Serialize the outpoint

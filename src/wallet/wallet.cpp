@@ -1667,9 +1667,13 @@ bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& sp
     if (IsMine(tx)) return true;
 
     // Check for silent payments too
-    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS)) {
-        for (SilentPaymentsSPKM* sp_spkm : GetSilentPaymentsSPKMs()) {
-            if (sp_spkm->IsMineSilentPayments(tx, spent_coins)) {
+    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
+        auto  sp_data = GetSilentPaymentsData(tx, spent_coins);
+        if (!sp_data.has_value()) {
+            return false;
+        }
+        for (DescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
+            if (sp_spkm->IsMine(sp_data->first, sp_data->second)) {
                 return true;
             }
         }
@@ -3753,7 +3757,9 @@ void CWallet::SetupDescriptorScriptPubKeyMans(const CExtKey& master_key)
 
     for (bool internal : {false, true}) {
         for (OutputType t : OUTPUT_TYPES) {
-            if (t == OutputType::SILENT_PAYMENT) continue;
+            if (t == OutputType::SILENT_PAYMENT && !IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS)) {
+                continue;
+            }
             SetupDescriptorScriptPubKeyMan(batch, master_key, t, internal);
         }
     }
@@ -3777,15 +3783,6 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
         master_key.SetSeed(seed_key);
 
         SetupDescriptorScriptPubKeyMans(master_key);
-
-        if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS)) {
-            // Also setup a SilentPaymentsSPKM
-            auto sp_spkm = std::unique_ptr<SilentPaymentsSPKM>(new SilentPaymentsSPKM(*this, m_keypool_size, master_key));
-            uint256 id = sp_spkm->GetID();
-            AddScriptPubKeyMan(id, std::move(sp_spkm));
-            AddActiveScriptPubKeyMan(id, OutputType::SILENT_PAYMENT, /*internal=*/false);
-            AddActiveScriptPubKeyMan(id, OutputType::SILENT_PAYMENT, /*internal=*/true);
-        }
     } else {
         ExternalSigner signer = ExternalSignerScriptPubKeyMan::GetExternalSigner();
 
@@ -3899,13 +3896,14 @@ DescriptorScriptPubKeyMan* CWallet::GetDescriptorScriptPubKeyMan(const WalletDes
     return nullptr;
 }
 
-std::set<SilentPaymentsSPKM*> CWallet::GetSilentPaymentsSPKMs() const
+std::set<DescriptorScriptPubKeyMan*> CWallet::GetSilentPaymentsSPKMs() const
 {
-    std::set<SilentPaymentsSPKM*> out;
+    std::set<DescriptorScriptPubKeyMan*> out;
     for (auto& spk_man_pair : m_spk_managers) {
         // Try to downcast to DescriptorScriptPubKeyMan then check if the descriptors match
-        SilentPaymentsSPKM* spk_manager = dynamic_cast<SilentPaymentsSPKM*>(spk_man_pair.second.get());
-        if (spk_manager != nullptr) {
+        DescriptorScriptPubKeyMan* spk_manager = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man_pair.second.get());
+        bool isSilentPaymentSPKM = spk_manager->GetOutputType() == OutputType::SILENT_PAYMENT;
+        if (spk_manager != nullptr && isSilentPaymentSPKM) {
             out.insert(spk_manager);
         }
     }

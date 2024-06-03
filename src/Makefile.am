@@ -728,6 +728,7 @@ libbitcoin_common_a_SOURCES = \
   script/sign.cpp \
   script/signingprovider.cpp \
   script/solver.cpp \
+  silentpaymentkey.cpp \
   $(BITCOIN_CORE_H)
 #
 

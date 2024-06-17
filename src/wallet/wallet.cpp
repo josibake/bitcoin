@@ -4568,15 +4568,11 @@ std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
 
 size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
-    return std::visit([&recipient](auto&& dest) -> size_t {
-        return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(dest)));
-    }, recipient.dest);
+    return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
 }
 
 bool IsDust(const CRecipient& recipient, const CFeeRate& dustRelayFee)
 {
-    return std::visit([&recipient, &dustRelayFee](auto&& dest) -> bool {
-        return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(dest)), dustRelayFee);
-    }, recipient.dest);
+    return ::IsDust(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)), dustRelayFee);
 }
 } // namespace wallet

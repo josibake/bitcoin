@@ -188,6 +188,10 @@ AC_ARG_ENABLE(module_ellswift,
     AS_HELP_STRING([--enable-module-ellswift],[enable ElligatorSwift module [default=yes]]), [],
     [SECP_SET_DEFAULT([enable_module_ellswift], [yes], [yes])])
 
+AC_ARG_ENABLE(module_silentpayments,
+    AS_HELP_STRING([--enable-module-silentpayments],[enable Silent Payments module [default=no]]), [],
+    [SECP_SET_DEFAULT([enable_module_silentpayments], [no], [yes])])
+
 AC_ARG_ENABLE(external_default_callbacks,
     AS_HELP_STRING([--enable-external-default-callbacks],[enable external default callback functions [default=no]]), [],
     [SECP_SET_DEFAULT([enable_external_default_callbacks], [no], [no])])
@@ -245,6 +249,20 @@ fi
 
 if test x"$enable_ctime_tests" = x"auto"; then
     enable_ctime_tests=$enable_valgrind
+fi
+
+print_msan_notice=no
+if test x"$enable_ctime_tests" = x"yes" && test x"$GCC" = x"yes"; then
+  SECP_MSAN_CHECK
+  # MSan on Clang >=16 reports unitialized memory in function parameters and return values, even if
+  # the uninitalized variable is never actually "used". This is called "eager" checking, and it's
+  # sounds like good idea for normal use of MSan. However, it yields many false positives in the
+  # ctime_tests because many return values depend on secret (i.e., "uninitialized") values, and
+  # we're only interested in detecting branches (which count as "uses") on secret data.
+  if test x"$msan_enabled" = x"yes"; then
+    SECP_TRY_APPEND_CFLAGS([-fno-sanitize-memory-param-retval], SECP_CFLAGS)
+    print_msan_notice=yes
+  fi
 fi
 
 if test x"$enable_coverage" = x"yes"; then
@@ -394,6 +412,10 @@ SECP_CFLAGS="$SECP_CFLAGS $WERROR_CFLAGS"
 
 # Processing must be done in a reverse topological sorting of the dependency graph
 # (dependent module first).
+if test x"$enable_module_silentpayments" = x"yes"; then
+  SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DENABLE_MODULE_SILENTPAYMENTS=1"
+fi
+
 if test x"$enable_module_ellswift" = x"yes"; then
   SECP_CONFIG_DEFINES="$SECP_CONFIG_DEFINES -DENABLE_MODULE_ELLSWIFT=1"
 fi
@@ -426,12 +448,7 @@ fi
 ### Check for --enable-experimental if necessary
 ###
 
-if test x"$enable_experimental" = x"yes"; then
-  AC_MSG_NOTICE([******])
-  AC_MSG_NOTICE([WARNING: experimental build])
-  AC_MSG_NOTICE([Experimental features do not have stable APIs or properties, and may not be safe for production use.])
-  AC_MSG_NOTICE([******])
-else
+if test x"$enable_experimental" = x"no"; then
   if test x"$set_asm" = x"arm32"; then
     AC_MSG_ERROR([ARM32 assembly is experimental. Use --enable-experimental to allow.])
   fi
@@ -455,6 +472,7 @@ AM_CONDITIONAL([ENABLE_MODULE_RECOVERY], [test x"$enable_module_recovery" = x"ye
 AM_CONDITIONAL([ENABLE_MODULE_EXTRAKEYS], [test x"$enable_module_extrakeys" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_SCHNORRSIG], [test x"$enable_module_schnorrsig" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_ELLSWIFT], [test x"$enable_module_ellswift" = x"yes"])
+AM_CONDITIONAL([ENABLE_MODULE_SILENTPAYMENTS], [test x"$enable_module_silentpayments" = x"yes"])
 AM_CONDITIONAL([USE_EXTERNAL_ASM], [test x"$enable_external_asm" = x"yes"])
 AM_CONDITIONAL([USE_ASM_ARM], [test x"$set_asm" = x"arm32"])
 AM_CONDITIONAL([BUILD_WINDOWS], [test "$build_windows" = "yes"])
@@ -477,6 +495,7 @@ echo "  module recovery         = $enable_module_recovery"
 echo "  module extrakeys        = $enable_module_extrakeys"
 echo "  module schnorrsig       = $enable_module_schnorrsig"
 echo "  module ellswift         = $enable_module_ellswift"
+echo "  module silentpayments   = $enable_module_silentpayments"
 echo
 echo "  asm                     = $set_asm"
 echo "  ecmult window size      = $set_ecmult_window"
@@ -492,3 +511,17 @@ echo "  CPPFLAGS                = $CPPFLAGS"
 echo "  SECP_CFLAGS             = $SECP_CFLAGS"
 echo "  CFLAGS                  = $CFLAGS"
 echo "  LDFLAGS                 = $LDFLAGS"
+
+if test x"$print_msan_notice" = x"yes"; then
+  echo
+  echo "Note:"
+  echo "  MemorySanitizer detected, tried to add -fno-sanitize-memory-param-retval to SECP_CFLAGS"
+  echo "  to avoid false positives in ctime_tests. Pass --disable-ctime-tests to avoid this."
+fi
+
+if test x"$enable_experimental" = x"yes"; then
+  echo
+  echo "WARNING: Experimental build"
+  echo "  Experimental features do not have stable APIs or properties, and may not be safe for"
+  echo "  production use."
+fi

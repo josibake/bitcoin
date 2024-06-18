@@ -6,11 +6,8 @@
 
 #include <common/system.h>
 #include <key_io.h>
-<<<<<<< HEAD
 #include <span.h>
-=======
 #include <silentpaymentkey.h>
->>>>>>> 6eb1979623 (Encode and Decode Sp Key tests)
 #include <streams.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>

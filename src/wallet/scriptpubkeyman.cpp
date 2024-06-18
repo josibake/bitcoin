@@ -2011,8 +2011,8 @@ bool LegacyScriptPubKeyMan::DeleteRecords()
 
 DescriptorScriptPubKeyMan::DescriptorScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size)
     :   ScriptPubKeyMan(storage),
-        m_wallet_descriptor(descriptor),
-        m_keypool_size(keypool_size)
+        m_keypool_size(keypool_size),
+        m_wallet_descriptor(descriptor)
 {
     // Populate m_map_label_tweaks if descriptor is Silent Payments
     if (descriptor.descriptor->GetOutputType() == OutputType::SILENT_PAYMENT) {
@@ -2094,7 +2094,7 @@ isminetype DescriptorScriptPubKeyMan::IsMine(const CScript& script) const
         }
         return ISMINE_NO;
     }
-    
+
     if (m_map_spk_tweaks.count(script) > 0) {
         return ISMINE_SPENDABLE;
     }

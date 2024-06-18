@@ -285,34 +285,6 @@ private:
     secure_unique_ptr<KeyType> m_keydata;
 };
 
-struct SpKey {
-    unsigned char version[1];
-    unsigned char vchFingerprint[4];
-    int maximumNumberOfLabels;
-    CKey scanKey;
-    CKey spendKey;
-
-    friend bool operator==(const SpKey& a, const SpKey& b)
-    {
-        return memcmp(a.version, b.version, sizeof(version)) == 0 &&
-            memcmp(a.vchFingerprint, b.vchFingerprint, sizeof(vchFingerprint)) == 0 &&
-            memcmp(a.maximumNumberOfLabels, b.maximumNumberOfLabels, sizeof(maximumNumberOfLabels)) == 0 &&
-            a.scanKey == b.scanKey &&
-            a.spendKey == b.spendKey;
-    }
-
-    SpKey() = default;
-    SpKey(const SpPubKey& sppub, const CKey& scanKey_in, const CKey& spendKey_in) : maximumNumberOfLabels(sppub.maxinumNumberOfLabels), scanKey(scanKey_in), spendKey(spendKey_in)
-    {
-        std::copy(sppub.version, sppub.version + sizeof(sppub.version), version);
-        std::copy(sppub.vchFingerprint, sppub.vchFingerprint + sizeof(sppub.vchFingerprint), vchFingerprint);
-    }
-
-    void Encode(unsigned char code[BIP352_SPKEY_SIZE]) const;
-    void Decode(const unsigned char code[BIP352_SPKEY_SIZE]);
-    SpPubKey Neuter();
-};
-
 /** Check that required EC support is available at runtime. */
 bool ECC_InitSanityCheck();
 

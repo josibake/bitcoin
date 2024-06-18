@@ -59,6 +59,7 @@
 #include <util/string.h>
 #include <util/time.h>
 #include <util/translation.h>
+#include <undo.h>
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/crypter.h>

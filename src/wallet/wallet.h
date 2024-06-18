@@ -1026,6 +1026,7 @@ public:
 
     //! Return the DescriptorScriptPubKeyMan for a WalletDescriptor if it is already in the wallet
     DescriptorScriptPubKeyMan* GetDescriptorScriptPubKeyMan(const WalletDescriptor& desc) const;
+    std::set<DescriptorScriptPubKeyMan*> GetSilentPaymentsSPKMs() const;
 
     //! Returns whether the provided ScriptPubKeyMan is internal
     //! @param[in] spk_man The ScriptPubKeyMan to test

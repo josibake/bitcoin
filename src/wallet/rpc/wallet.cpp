@@ -423,7 +423,7 @@ static RPCHelpMan createwallet()
     }
 #endif
 
-    if (self.Arg<bool>(8)) {
+    if (self.Arg<bool>("silent_payments")) {
         if (!(flags & WALLET_FLAG_DESCRIPTORS)) {
             throw JSONRPCError(RPC_WALLET_ERROR, "Wallet with silent payments must also be a descriptor wallet");
         }

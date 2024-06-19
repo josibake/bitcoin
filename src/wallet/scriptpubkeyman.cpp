@@ -2054,10 +2054,7 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const 
             V0SilentPaymentDestination main_dest;
             main_dest.m_scan_pubkey = sppubkey->scanKey.GetPubKey();
             main_dest.m_spend_pubkey = sppubkey->spendKey;
-            auto label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, m_wallet_descriptor.next_index);
-            m_map_label_tweaks.insert(label_data);
-            V0SilentPaymentDestination label_dest = BIP352::GenerateSilentPaymentLabelledAddress(main_dest, label_data.second);
-            dest = CTxDestination{label_dest};
+            dest = CTxDestination{main_dest};
         } else {
             TopUp();
 

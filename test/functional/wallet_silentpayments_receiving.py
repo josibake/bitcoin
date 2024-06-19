@@ -89,9 +89,9 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         assert_equal(wallet.getbalance(), 10)
         wallet.gettransaction(txid)
 
-        self.log.info("Test getnewaddress returns new labelled address")
+        self.log.info("Test getnewaddress returns the same address each time")
         new_addr = wallet.getnewaddress(address_type="silent-payment")
-        assert new_addr != addr
+        assert new_addr == addr
         txid = self.def_wallet.sendtoaddress(new_addr, 10)
         self.generate(self.nodes[0], 1)
 

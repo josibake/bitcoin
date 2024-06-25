@@ -280,6 +280,7 @@ BITCOIN_CORE_H = \
   script/signingprovider.h \
   script/solver.h \
   signet.h \
+  silentpaymentkey.h \
   streams.h \
   support/allocators/pool.h \
   support/allocators/secure.h \
@@ -469,6 +470,7 @@ libbitcoin_node_a_SOURCES = \
   rpc/txoutproof.cpp \
   script/sigcache.cpp \
   signet.cpp \
+  silentpaymentkey.cpp \
   torcontrol.cpp \
   txdb.cpp \
   txmempool.cpp \
@@ -723,6 +725,7 @@ libbitcoin_common_a_SOURCES = \
   script/sign.cpp \
   script/signingprovider.cpp \
   script/solver.cpp \
+  silentpaymentkey.cpp \
   $(BITCOIN_CORE_H)
 #
 

@@ -158,6 +158,7 @@ std::optional<PublicData> GetSilentPaymentsPublicData(const std::vector<CTxIn>& 
     std::vector<CPubKey> pubkeys;
     std::vector<XOnlyPubKey> xonly_pubkeys;
     std::vector<COutPoint> tx_outpoints;
+    if (coins.empty()) return std::nullopt;
     for (const CTxIn& txin : vin) {
         const Coin& coin = coins.at(txin.prevout);
         Assert(!coin.IsSpent());

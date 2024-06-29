@@ -50,14 +50,10 @@ AC_MSG_CHECKING(whether MemorySanitizer is enabled)
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
   #if defined(__has_feature)
   #  if __has_feature(memory_sanitizer)
-       /* MemorySanitizer is enabled. */
-  #  elif
-  #    error "MemorySanitizer is disabled."
+  #    error "MemorySanitizer is enabled."
   #  endif
-  #else
-  #  error "__has_feature is not defined."
   #endif
-  ]])], [msan_enabled=yes], [msan_enabled=no])
+  ]])], [msan_enabled=no], [msan_enabled=yes])
 AC_MSG_RESULT([$msan_enabled])
 ])
 

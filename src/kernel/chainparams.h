@@ -74,8 +74,6 @@ public:
         SECRET_KEY,
         EXT_PUBLIC_KEY,
         EXT_SECRET_KEY,
-        SP_PUBLIC_KEY,
-        SP_SECRET_KEY,
 
         MAX_BASE58_TYPES
     };
@@ -108,6 +106,7 @@ public:
     const std::vector<unsigned char>& Base58Prefix(Base58Type type) const { return base58Prefixes[type]; }
     const std::string& Bech32HRP() const { return bech32_hrp; }
     const std::string& SilentPaymentHRP() const { return silent_payment_hrp; }
+    const std::string SilentPaymentKeyHRP(bool is_public = true) const { return silent_payment_hrp + (is_public ? "pub" : "prv"); }
     const std::vector<uint8_t>& FixedSeeds() const { return vFixedSeeds; }
 
     std::optional<AssumeutxoData> AssumeutxoForHeight(int height) const

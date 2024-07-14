@@ -2868,14 +2868,39 @@ util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetNewDesti
     if (!sppubkey.has_value()) {
         throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
     }
+
     V0SilentPaymentDestination main_dest;
     main_dest.m_scan_pubkey = sppubkey->scanKey.GetPubKey();
     main_dest.m_spend_pubkey = sppubkey->spendKey;
-    auto label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, m_wallet_descriptor.next_index);
+    CTxDestination dest{main_dest};
+    return dest;
+}
+
+CTxDestination SilentPaymentDescriptorScriptPubKeyMan::GetLabelledDestination(uint64_t index)
+{
+    AssertLockHeld(cs_desc_man);
+
+    auto sppubkey = GetSpPubKeyFrom(m_wallet_descriptor.descriptor);
+    if (!sppubkey.has_value()) {
+        throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
+    }
+
+    V0SilentPaymentDestination main_dest;
+    main_dest.m_scan_pubkey = sppubkey->scanKey.GetPubKey();
+    main_dest.m_spend_pubkey = sppubkey->spendKey;
+    // Generate label tweak
+    auto label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, index);
     m_map_label_tweaks.insert(label_data);
     V0SilentPaymentDestination label_dest = BIP352::GenerateSilentPaymentLabelledAddress(main_dest, label_data.second);
     CTxDestination dest{label_dest};
+    return dest;
+}
 
+util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetNewLabelledDestination(uint64_t& index)
+{
+    LOCK(cs_desc_man);
+    CTxDestination dest = GetLabelledDestination(m_wallet_descriptor.next_index);
+    index = m_wallet_descriptor.next_index; // Return the index for this destination
     m_wallet_descriptor.next_index++;
     WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
     return dest;
@@ -2923,12 +2948,8 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKe
 util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetReservedDestination(const OutputType type, bool internal, int64_t& index, CKeyPool& keypool)
 {
     LOCK(cs_desc_man);
-
-    int64_t index_cache = m_wallet_descriptor.next_index;
-    m_wallet_descriptor.next_index = 0; // Set to zero for change
-    auto op_dest = GetNewDestination(type);
-    index = 0;
-    m_wallet_descriptor.next_index = index_cache; // Restore next_index
+    // Destination at index 0 is the change destination
+    auto op_dest = GetLabelledDestination(0);
     return op_dest;
 }
 

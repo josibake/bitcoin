@@ -83,6 +83,8 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         wallet = self.nodes[0].get_wallet_rpc("basic")
 
         addr = wallet.getnewaddress(address_type="silent-payment")
+        addr_again = wallet.getnewaddress(address_type="silent-payment")
+        assert addr == addr_again
         txid = self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
 
@@ -90,9 +92,9 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         wallet.gettransaction(txid)
 
         self.log.info("Test getnewaddress returns new labelled address")
-        new_addr = wallet.getnewaddress(address_type="silent-payment")
-        assert new_addr != addr
-        txid = self.def_wallet.sendtoaddress(new_addr, 10)
+        labeled_addr = wallet.getnewaddress(address_type="silent-payment", label="foo")
+        assert labeled_addr != addr
+        txid = self.def_wallet.sendtoaddress(labeled_addr, 10)
         self.generate(self.nodes[0], 1)
 
         assert_equal(wallet.getbalance(), 20)

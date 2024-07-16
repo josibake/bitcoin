@@ -271,18 +271,9 @@ bool CKey::SignCompact(const uint256 &hash, std::vector<unsigned char>& vchSig) 
 
 bool CKey::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint256* merkle_root, const uint256& aux) const
 {
-    assert(sig.size() == 64);
     KeyPair kp = ComputeKeyPair(merkle_root);
     if (!kp.IsValid()) return false;
-    auto keypair = reinterpret_cast<const secp256k1_keypair*>(kp.data());
-    bool ret = secp256k1_schnorrsig_sign32(secp256k1_context_sign, sig.data(), hash.data(), keypair, aux.data());
-    if (ret) {
-        // Additional verification step to prevent using a potentially corrupted signature
-        secp256k1_xonly_pubkey pubkey_verify;
-        ret = secp256k1_keypair_xonly_pub(secp256k1_context_static, &pubkey_verify, nullptr, keypair);
-        ret &= secp256k1_schnorrsig_verify(secp256k1_context_static, sig.data(), hash.begin(), 32, &pubkey_verify);
-    }
-    if (!ret) memory_cleanse(sig.data(), sig.size());
+    bool ret = kp.SignSchnorr(hash, sig, aux);
     /* Clear the keypair */
     kp = KeyPair();
     return ret;
@@ -431,6 +422,21 @@ KeyPair::KeyPair(const CKey& key, const uint256* merkle_root)
         ret = secp256k1_keypair_xonly_tweak_add(secp256k1_context_static, keypair, tweak.data());
     }
     if (!ret) ClearKeyPairData();
+}
+
+bool KeyPair::SignSchnorr(const uint256& hash, Span<unsigned char> sig, const uint256& aux) const
+{
+    assert(sig.size() == 64);
+    auto keypair = reinterpret_cast<const secp256k1_keypair*>(m_keypair->data());
+    bool ret = secp256k1_schnorrsig_sign32(secp256k1_context_sign, sig.data(), hash.data(), keypair, aux.data());
+    if (ret) {
+        // Additional verification step to prevent using a potentially corrupted signature
+        secp256k1_xonly_pubkey pubkey_verify;
+        ret = secp256k1_keypair_xonly_pub(secp256k1_context_static, &pubkey_verify, nullptr, keypair);
+        ret &= secp256k1_schnorrsig_verify(secp256k1_context_static, sig.data(), hash.begin(), 32, &pubkey_verify);
+    }
+    if (!ret) memory_cleanse(sig.data(), sig.size());
+    return ret;
 }
 
 bool ECC_InitSanityCheck() {

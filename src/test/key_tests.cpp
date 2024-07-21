@@ -345,4 +345,31 @@ BOOST_AUTO_TEST_CASE(bip341_test_h)
     BOOST_CHECK(XOnlyPubKey::NUMS_H == H);
 }
 
+BOOST_AUTO_TEST_CASE(key_schnorr_tweak_smoke_test)
+{
+    // Sanity check to ensure we get the same tweak using CPubKey vs secp256k1 functions
+    secp256k1_context* secp256k1_context_sign = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
+
+    CKey key;
+    key.MakeNewKey(true);
+    uint256 merkle_root = InsecureRand256();
+
+    // secp256k1 functions
+    secp256k1_keypair keypair;
+    BOOST_CHECK(secp256k1_keypair_create(secp256k1_context_sign, &keypair, UCharCast(key.begin())));
+    secp256k1_xonly_pubkey pubkey_old;
+    BOOST_CHECK(secp256k1_keypair_xonly_pub(secp256k1_context_sign, &pubkey_old, nullptr, &keypair));
+    unsigned char pubkey_bytes_old[32];
+    BOOST_CHECK(secp256k1_xonly_pubkey_serialize(secp256k1_context_sign, pubkey_bytes_old, &pubkey_old));
+    uint256 tweak_old = XOnlyPubKey(pubkey_bytes_old).ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root);
+
+    // CPubKey
+    CPubKey pubkey_bytes_new = key.GetPubKey();
+    uint256 tweak_new = XOnlyPubKey(pubkey_bytes_new).ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root);
+
+    BOOST_CHECK_EQUAL(tweak_old, tweak_new);
+
+    secp256k1_context_destroy(secp256k1_context_sign);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

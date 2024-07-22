@@ -34,6 +34,8 @@ if [ -n "${FILE_ENV}" ]; then
 fi
 
 echo "Fallback to default values in env (if not yet set)"
+export CONTAINER_NAME=${CONTAINER_NAME:-"ci_default"}
+export CI_IMAGE_NAME_TAG=${CI_IMAGE_NAME_TAG:-"docker.io/ubuntu:24.04"}
 # The number of parallel jobs to pass down to make and test_runner.py
 export MAKEJOBS=${MAKEJOBS:--j4}
 # Whether to prefer BusyBox over GNU utilities

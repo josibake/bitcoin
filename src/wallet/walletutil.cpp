@@ -97,9 +97,9 @@ WalletDescriptor GenerateWalletDescriptor(const CExtKey& master_key, const Outpu
             }
         }
 
-        // Add the derived keys
+        // We only need to save the spend key
+        // The scan key is preserved in the descriptor
         out_keys.emplace_back(spend_key.key, spend_key.key.GetPubKey());
-        out_keys.emplace_back(scan_key.key, scan_key.key.GetPubKey());
 
         SpPubKey sppub_key(scan_key.key, spend_key.key.GetPubKey());
         std::string sppub = EncodeSpPubKey(sppub_key);

@@ -161,7 +161,7 @@ struct CDBBatch::WriteBatchImpl {
     leveldb::WriteBatch batch;
 };
 
-CDBBatch::CDBBatch(const CDBWrapper& _parent)
+CDBBatch::CDBBatch(const CDBWrapperBase& _parent)
     : parent{_parent},
       m_impl_batch{std::make_unique<CDBBatch::WriteBatchImpl>()} {};
 
@@ -225,7 +225,8 @@ struct LevelDBContext {
 };
 
 CDBWrapper::CDBWrapper(const DBParams& params)
-    : m_db_context{std::make_unique<LevelDBContext>()}, m_name{fs::PathToString(params.path.stem())}, m_path{params.path}, m_is_memory{params.memory_only}
+    : CDBWrapperBase(params),
+    m_db_context{std::make_unique<LevelDBContext>()}
 {
     DBContext().penv = nullptr;
     DBContext().readoptions.verify_checksums = true;
@@ -326,15 +327,15 @@ size_t CDBWrapper::DynamicMemoryUsage() const
 //
 // We must use a string constructor which specifies length so that we copy
 // past the null-terminator.
-const std::string CDBWrapper::OBFUSCATE_KEY_KEY("\000obfuscate_key", 14);
+const std::string CDBWrapperBase::OBFUSCATE_KEY_KEY("\000obfuscate_key", 14);
 
-const unsigned int CDBWrapper::OBFUSCATE_KEY_NUM_BYTES = 8;
+const unsigned int CDBWrapperBase::OBFUSCATE_KEY_NUM_BYTES = 8;
 
 /**
  * Returns a string (consisting of 8 random bytes) suitable for use as an
  * obfuscating XOR key.
  */
-std::vector<unsigned char> CDBWrapper::CreateObfuscateKey() const
+std::vector<unsigned char> CDBWrapperBase::CreateObfuscateKey() const
 {
     std::vector<uint8_t> ret(OBFUSCATE_KEY_NUM_BYTES);
     GetRandBytes(ret);
@@ -380,6 +381,8 @@ size_t CDBWrapper::EstimateSizeImpl(Span<const std::byte> key1, Span<const std::
     return size;
 }
 
+// TODO: CDBIterator should be abstract and IsEmpty shouldn't be virtual in
+// CDBWrapperBase
 bool CDBWrapper::IsEmpty()
 {
     std::unique_ptr<CDBIterator> it(NewIterator());
@@ -393,9 +396,9 @@ struct CDBIterator::IteratorImpl {
     explicit IteratorImpl(leveldb::Iterator* _iter) : iter{_iter} {}
 };
 
-CDBIterator::CDBIterator(const CDBWrapper& _parent, std::unique_ptr<IteratorImpl> _piter) : parent(_parent),
+CDBIterator::CDBIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter) : parent(_parent),
                                                                                             m_impl_iter(std::move(_piter)) {}
-
+// TODO: CDBIterator should be generic?
 CDBIterator* CDBWrapper::NewIterator()
 {
     return new CDBIterator{*this, std::make_unique<CDBIterator::IteratorImpl>(DBContext().pdb->NewIterator(DBContext().iteroptions))};
@@ -424,7 +427,7 @@ void CDBIterator::Next() { m_impl_iter->iter->Next(); }
 
 namespace dbwrapper_private {
 
-const std::vector<unsigned char>& GetObfuscateKey(const CDBWrapper &w)
+const std::vector<unsigned char>& GetObfuscateKey(const CDBWrapperBase &w)
 {
     return w.obfuscate_key;
 }

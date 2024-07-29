@@ -362,6 +362,30 @@ public:
 
     CDBIterator* NewIterator() override;
     bool IsEmpty() override;
-    };
+};
+
+struct MDBXContext;
+
+class MDBXWrapper : public CDBWrapperBase
+{
+private:
+    //! holds all mdbx-specific fields of this class
+    std::unique_ptr<MDBXContext> m_db_context;
+    auto& DBContext() const LIFETIMEBOUND { return *Assert(m_db_context); }
+
+    std::optional<std::string> ReadImpl(Span<const std::byte> key) const override;
+    bool ExistsImpl(Span<const std::byte> key) const override;
+    size_t EstimateSizeImpl(Span<const std::byte> key1, Span<const std::byte> key2) const override;
+
+public:
+    MDBXWrapper(const DBParams& params);
+    ~MDBXWrapper() override = default;
+
+    bool WriteBatch(CDBBatchBase& batch, bool fSync = false) override;
+    size_t DynamicMemoryUsage() const override;
+
+    CDBIterator* NewIterator() override;
+    bool IsEmpty() override;
+};
 
 #endif // BITCOIN_DBWRAPPER_H

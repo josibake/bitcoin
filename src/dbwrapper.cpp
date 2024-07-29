@@ -387,7 +387,7 @@ size_t CDBWrapper::EstimateSizeImpl(Span<const std::byte> key1, Span<const std::
 // CDBWrapperBase
 bool CDBWrapper::IsEmpty()
 {
-    std::unique_ptr<CDBIterator> it(NewIterator());
+    std::unique_ptr<CDBIterator> it(CDBWrapper::NewIterator());
     it->SeekToFirst();
     return !(it->Valid());
 }
@@ -395,6 +395,46 @@ bool CDBWrapper::IsEmpty()
 struct MDBXContext {
     mdbx::env_managed env;
 };
+
+MDBXWrapper::MDBXWrapper(const DBParams& params)
+    : CDBWrapperBase(params),
+    m_db_context{std::make_unique<MDBXContext>()}
+{
+}
+
+std::optional<std::string> MDBXWrapper::ReadImpl(Span<const std::byte> key) const
+{
+    return std::nullopt;
+}
+
+bool MDBXWrapper::ExistsImpl(Span<const std::byte> key) const {
+    return false;
+}
+
+size_t MDBXWrapper::EstimateSizeImpl(Span<const std::byte> key1, Span<const std::byte> key2) const
+{
+    return 0;
+}
+
+bool MDBXWrapper::WriteBatch(CDBBatchBase& batch, bool fSync)
+{
+    return false;
+}
+
+size_t MDBXWrapper::DynamicMemoryUsage() const
+{
+    return 0;
+}
+
+CDBIterator* MDBXWrapper::NewIterator()
+{
+    return nullptr;
+}
+
+bool MDBXWrapper::IsEmpty()
+{
+    return true;
+}
 
 struct CDBIterator::IteratorImpl {
     const std::unique_ptr<leveldb::Iterator> iter;

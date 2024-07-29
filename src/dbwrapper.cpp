@@ -28,6 +28,7 @@
 #include <leveldb/slice.h>
 #include <leveldb/status.h>
 #include <leveldb/write_batch.h>
+#include <mdbx.h++>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -388,6 +389,16 @@ bool CDBWrapper::IsEmpty()
     std::unique_ptr<CDBIterator> it(NewIterator());
     it->SeekToFirst();
     return !(it->Valid());
+}
+
+struct MDBXContext {
+    mdbx::env_managed env;
+};
+
+MDBXWrapper::MDBXWrapper(const DBParams& params)
+    : CDBWrapperBase(params),
+    m_db_context{std::make_unique<MDBXContext>()}
+{
 }
 
 struct CDBIterator::IteratorImpl {

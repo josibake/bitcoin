@@ -285,6 +285,10 @@ static RPCHelpMan deriveaddresses()
 
                     addresses.push_back(EncodeDestination(dest));
                 }
+
+                for (const auto& sppubkey_pair: provider.sppubkeys) {
+                    addresses.push_back(EncodeDestination(V0SilentPaymentDestination(sppubkey_pair.second)));
+                }
             }
 
             // This should not be possible, but an assert seems overkill:

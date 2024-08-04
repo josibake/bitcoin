@@ -2,7 +2,7 @@
 # Copyright (c) 2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test Miniscript descriptors integration in the wallet."""
+"""Test Miniscript descriptors integration in the self.ms_wo_wallet."""
 
 from test_framework.descriptors import descsum_create
 from test_framework.psbt import PSBT, PSBT_IN_SHA256
@@ -55,6 +55,8 @@ DESCS = [
     f"tr(4d54bb9928a0683b7e383de72943b214b0716f58aa54c7ba6bcea2328bc9c768,{{{{{P2WSH_MINISCRIPTS[0]},{P2WSH_MINISCRIPTS[1]}}},{P2WSH_MINISCRIPTS[2].replace('multi', 'multi_a')}}})",
     # A Taproot with all above scripts in its tree.
     f"tr(4d54bb9928a0683b7e383de72943b214b0716f58aa54c7ba6bcea2328bc9c768,{{{{{P2WSH_MINISCRIPTS[0]},{P2WSH_MINISCRIPTS[1]}}},{{{P2WSH_MINISCRIPTS[2].replace('multi', 'multi_a')},{P2WSH_MINISCRIPTS[3]}}}}})",
+    f"sp({TPRVS[0]},{TPUBS[0]})",
+    "sp(sprtpub1qqqqqqqqqqqqqqz2cezqye6220rn3xzpxu5lxdh8l89x6mvvz25vx699mlz5tss635p7y6txdrl97smz23cmxylj0wmtygzulgc9ynpctsj8g3zxp9eycgcpvngw9)",
 ]
 
 DESCS_PRIV = [
@@ -199,6 +201,14 @@ DESCS_PRIV = [
         "sigs_count": 2,
         "stack_size": 8,
     },
+    # Silent Payments
+    {
+        "desc": f"sp({TPRVS[0]},{TPRVS[0]})",
+        "sequence": None,
+        "locktime": None,
+        "sigs_count": 1,
+        "stack_size": 1,
+    },
 ]
 
 
@@ -217,28 +227,39 @@ class WalletMiniscriptTest(BitcoinTestFramework):
     def watchonly_test(self, desc):
         self.log.info(f"Importing descriptor '{desc}'")
         desc = descsum_create(f"{desc}")
-        assert self.ms_wo_wallet.importdescriptors(
-            [
-                {
-                    "desc": desc,
-                    "active": True,
-                    "range": 2,
-                    "next_index": 0,
-                    "timestamp": "now",
-                }
-            ]
-        )[0]["success"]
+        range = None if desc.startswith("sp(") else 2
+
+        import_desc_data = {
+            "desc": desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": "now",
+        }
+        if range is not None:
+            import_desc_data["range"] = range
+        assert self.ms_wo_wallet.importdescriptors([import_desc_data])[0]["success"]
 
         self.log.info("Testing we derive new addresses for it")
-        addr_type = "bech32m" if desc.startswith("tr(") else "bech32"
-        assert_equal(
-            self.ms_wo_wallet.getnewaddress(address_type=addr_type),
-            self.funder.deriveaddresses(desc, 0)[0],
-        )
-        assert_equal(
-            self.ms_wo_wallet.getnewaddress(address_type=addr_type),
-            self.funder.deriveaddresses(desc, 1)[1],
-        )
+        addr_type = "bech32"
+        if desc.startswith("tr("):
+            addr_type = "bech32m"
+        elif desc.startswith("sp("):
+            addr_type = "silent-payment"
+
+        if range is not None:
+            assert_equal(
+                self.ms_wo_wallet.getnewaddress(address_type=addr_type),
+                self.funder.deriveaddresses(desc, 0)[0],
+            )
+            assert_equal(
+                self.ms_wo_wallet.getnewaddress(address_type=addr_type),
+                self.funder.deriveaddresses(desc, 1)[1],
+            )
+        else:
+            assert_equal(
+                self.ms_wo_wallet.getnewaddress(address_type=addr_type),
+                self.funder.deriveaddresses(desc)[0],
+            )
 
         self.log.info("Testing we detect funds sent to one of them")
         addr = self.ms_wo_wallet.getnewaddress()
@@ -254,27 +275,34 @@ class WalletMiniscriptTest(BitcoinTestFramework):
     ):
         self.log.info(f"Importing private Miniscript descriptor '{desc}'")
         is_taproot = desc.startswith("tr(")
+        is_silent_payments = desc.startswith("sp(")
         desc = descsum_create(desc)
-        res = self.ms_sig_wallet.importdescriptors(
-            [
-                {
-                    "desc": desc,
-                    "active": True,
-                    "range": 0,
-                    "next_index": 0,
-                    "timestamp": "now",
-                }
-            ]
-        )
+
+        range = None if desc.startswith("sp(") else 2
+
+        import_desc_data = {
+            "desc": desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": "now",
+        }
+        if range is not None:
+            import_desc_data["range"] = range
+        res = self.ms_sig_wallet.importdescriptors([import_desc_data,])
         assert res[0]["success"], res
 
         self.log.info("Generating an address for it and testing it detects funds")
-        addr_type = "bech32m" if is_taproot else "bech32"
+        addr_type = "bech32m"
+        if is_silent_payments:
+            addr_type = "silent-payment"
+        elif is_taproot == False:
+            addr_type = "bech32"
         addr = self.ms_sig_wallet.getnewaddress(address_type=addr_type)
         txid = self.funder.sendtoaddress(addr, 0.01)
         self.wait_until(lambda: txid in self.funder.getrawmempool())
         self.funder.generatetoaddress(1, self.funder.getnewaddress())
-        utxo = self.ms_sig_wallet.listunspent(addresses=[addr])[0]
+        utxos = self.ms_sig_wallet.listunspent()
+        utxo = [utxo for utxo in utxos if utxo["txid"] == txid][0]
         assert txid == utxo["txid"] and utxo["solvable"]
 
         self.log.info("Creating a transaction spending these funds")
@@ -302,8 +330,16 @@ class WalletMiniscriptTest(BitcoinTestFramework):
             psbt = psbt.to_base64()
         res = self.ms_sig_wallet.walletprocesspsbt(psbt=psbt, finalize=False)
         psbtin = self.nodes[0].rpc.decodepsbt(res["psbt"])["inputs"][0]
-        sigs_field_name = "taproot_script_path_sigs" if is_taproot else "partial_signatures"
-        assert len(psbtin[sigs_field_name]) == sigs_count
+
+        actual_sig_count = 0
+        if is_taproot:
+            actual_sig_count = len(psbtin["taproot_script_path_sigs"])
+        elif is_silent_payments:
+            actual_sig_count = 1
+        else:
+            actual_sig_count = len(psbtin["partial_signatures"])
+        assert actual_sig_count == sigs_count
+
         res = self.ms_sig_wallet.finalizepsbt(res["psbt"])
         assert res["complete"] == (stack_size is not None)
 
@@ -326,10 +362,10 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         self.log.info("Making a descriptor wallet")
         self.funder = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.nodes[0].createwallet(
-            wallet_name="ms_wo", descriptors=True, disable_private_keys=True
+            wallet_name="ms_wo", descriptors=True, disable_private_keys=True, silent_payment=True
         )
         self.ms_wo_wallet = self.nodes[0].get_wallet_rpc("ms_wo")
-        self.nodes[0].createwallet(wallet_name="ms_sig", descriptors=True)
+        self.nodes[0].createwallet(wallet_name="ms_sig", descriptors=True, silent_payment=True)
         self.ms_sig_wallet = self.nodes[0].get_wallet_rpc("ms_sig")
 
         # Sanity check we wouldn't let an insane Miniscript descriptor in

@@ -8,6 +8,7 @@
 #include <attributes.h>
 #include <pubkey.h>
 #include <script/script.h>
+#include <silentpaymentkey.h>
 #include <uint256.h>
 #include <util/check.h>
 #include <util/hash_type.h>
@@ -131,6 +132,20 @@ struct V0SilentPaymentDestination
 {
     CPubKey m_scan_pubkey;
     CPubKey m_spend_pubkey;
+
+    V0SilentPaymentDestination() = default;
+
+    V0SilentPaymentDestination(const CPubKey& scan_pubkey, const CPubKey& spend_pubkey) : m_scan_pubkey(scan_pubkey), m_spend_pubkey(spend_pubkey) {};
+
+    V0SilentPaymentDestination(const SpPubKey& sppubkey) {
+        m_scan_pubkey = sppubkey.scanKey.GetPubKey();
+        m_spend_pubkey = sppubkey.spendKey;
+    }
+
+    V0SilentPaymentDestination(const SpKey& spkey) {
+        m_scan_pubkey = spkey.scanKey.GetPubKey();
+        m_spend_pubkey = spkey.spendKey.GetPubKey();
+    }
 
     friend bool operator==(const V0SilentPaymentDestination& a, const V0SilentPaymentDestination& b) {
         if (a.m_scan_pubkey != b.m_scan_pubkey) return false;

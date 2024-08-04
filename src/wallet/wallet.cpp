@@ -74,6 +74,7 @@
 #include <algorithm>
 #include <cassert>
 #include <condition_variable>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <stdexcept>
@@ -2646,6 +2647,18 @@ util::Result<CTxDestination> CWallet::GetNewDestination(const OutputType type, c
     auto spk_man = GetScriptPubKeyMan(type, /*internal=*/false);
     if (!spk_man) {
         return util::Error{strprintf(_("Error: No %s addresses available."), FormatOutputType(type))};
+    }
+
+    if (type == OutputType::SILENT_PAYMENT && !label.empty()){
+        SilentPaymentDescriptorScriptPubKeyMan* sp_spk_man = dynamic_cast<SilentPaymentDescriptorScriptPubKeyMan*>(spk_man);
+        assert(sp_spk_man);
+        uint64_t index;
+        auto op_dest = sp_spk_man->GetNewLabeledDestination(index);
+        if (op_dest) {
+            SetAddressBook(*op_dest, label, AddressPurpose::RECEIVE);
+        }
+
+        return op_dest;
     }
 
     auto op_dest = spk_man->GetNewDestination(type);

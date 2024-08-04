@@ -25,6 +25,7 @@
 
 #include <boost/signals2/signal.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <unordered_map>
@@ -736,6 +737,8 @@ public:
         {}
 
     util::Result<CTxDestination> GetNewDestination(const OutputType type) override;
+    util::Result<CTxDestination> GetNewLabeledDestination(uint64_t& index);
+    V0SilentPaymentDestination GetLabeledDestination(uint64_t index) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
     util::Result<CTxDestination> GetReservedDestination(const OutputType type, bool internal, int64_t& index, CKeyPool& keypool) override;
     bool CanGetAddresses(bool internal) const override { return true; }
 
@@ -751,6 +754,8 @@ public:
 
     //! Add tweak into m_map_spk_tweaks without saving to DB
     void AddTweak(const uint256& tweak);
+
+    std::vector<WalletDestination> MarkUnusedAddresses(const CScript& script) override;
 };
 
 /** struct containing information needed for migrating legacy wallets to descriptor wallets */

@@ -22,6 +22,18 @@ struct SpPubKey {
 
     SpPubKey() = default;
 
+    /**
+     * Creates an incomplete SpPubKey.
+     */
+    SpPubKey(CKey scan_key) : scanKey(scan_key)
+    {
+      memset(version, 0, sizeof(version));
+      memset(vchFingerprint, 0, sizeof(vchFingerprint));
+      maximumNumberOfLabels = 0;
+      CPubKey dummySpendPubKey;
+      spendKey = dummySpendPubKey;
+    }
+
     SpPubKey(CKey scan_key, CPubKey spend_key) : scanKey(scan_key), spendKey(spend_key)
     {
       memset(version, 0, sizeof(version));

@@ -1507,7 +1507,7 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
         }
 
         // Active descriptors must be ranged
-        if (active && !parsed_descs.at(0)->IsRange()) {
+        if (active && !parsed_descs.at(0)->IsRange() && parsed_descs.at(0)->GetOutputType() != OutputType::SILENT_PAYMENT) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Active descriptors must be ranged");
         }
 

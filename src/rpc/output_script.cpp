@@ -329,6 +329,9 @@ static RPCHelpMan deriveaddresses()
             if (descs.size() == 1) {
                 return addresses;
             }
+            for (const auto& sppubkey_pair: key_provider.sppubkeys) {
+                addresses.push_back(EncodeDestination(V0SilentPaymentDestination(sppubkey_pair.second)));
+            }
 
             UniValue ret(UniValue::VARR);
             ret.push_back(addresses);

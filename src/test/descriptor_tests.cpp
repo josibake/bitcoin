@@ -511,6 +511,27 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
     BOOST_CHECK_EQUAL(desc->ToString(), expected_desc + "#" + checksum);
 }
 
+void CheckSilentPayments(const std::string& desc, const std::string& expected_private_string, const std::string& expected_public_string, const std::string& expected_norm_string, int flags = 0)
+{
+    FlatSigningProvider keys;
+    std::string error;
+    auto parsed_desc = Parse(desc, keys, error, false);
+    BOOST_CHECK_MESSAGE(parsed_desc.at(0), error);
+
+    if (~flags & MISSING_PRIVKEYS) {
+        std::string private_string;
+        BOOST_CHECK(parsed_desc.at(0)->ToPrivateString(keys, private_string));
+        BOOST_CHECK_MESSAGE(EqualDescriptor(private_string, expected_private_string), "Private: " + private_string + " Expected: " + expected_private_string);
+    }
+
+    std::string public_string = parsed_desc.at(0)->ToString();
+    std::string norm_string;
+    BOOST_CHECK(parsed_desc.at(0)->ToNormalizedString(keys, norm_string));
+
+    BOOST_CHECK_MESSAGE(EqualDescriptor(public_string, expected_public_string), "Public: " + public_string + " Expected: " + expected_public_string);
+    BOOST_CHECK_MESSAGE(EqualDescriptor(norm_string, expected_norm_string), "Normalized: " + norm_string + " Expected: " + expected_norm_string);
+}
+
 }
 
 BOOST_FIXTURE_TEST_SUITE(descriptor_tests, BasicTestingSetup)
@@ -1076,6 +1097,53 @@ BOOST_AUTO_TEST_CASE(descriptor_test)
     CheckInferDescriptor("76a914a31725c74421fadc50d35520ab8751ed120af80588ac", "pkh(04c56fe4a92d401bcbf1b3dfbe4ac3dac5602ca155a3681497f02c1b9a733b92d704e2da6ec4162e4846af9236ef4171069ac8b7f8234a8405b6cadd96f34f5a31)", {}, {{"04c56fe4a92d401bcbf1b3dfbe4ac3dac5602ca155a3681497f02c1b9a733b92d704e2da6ec4162e4846af9236ef4171069ac8b7f8234a8405b6cadd96f34f5a31", ""}});
     // Infer pk() from p2pk with uncompressed key
     CheckInferDescriptor("4104032540df1d3c7070a8ab3a9cdd304dfc7fd1e6541369c53c4c3310b2537d91059afc8b8e7673eb812a32978dabb78c40f2e423f7757dca61d11838c7aeeb5220ac", "pk(04032540df1d3c7070a8ab3a9cdd304dfc7fd1e6541369c53c4c3310b2537d91059afc8b8e7673eb812a32978dabb78c40f2e423f7757dca61d11838c7aeeb5220)", {}, {{"04032540df1d3c7070a8ab3a9cdd304dfc7fd1e6541369c53c4c3310b2537d91059afc8b8e7673eb812a32978dabb78c40f2e423f7757dca61d11838c7aeeb5220", ""}});
+
+    // Silent Payments
+    // Check that /* uses default derivation path for SP
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/*,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/*)",
+        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdg3tdld9)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)");
+
+    // Check that no path uses default derivation path for SP
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdg3tdld9)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)");
+
+    // Check that provided path is used instead of the default derivation path for SP
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/0h)",
+        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qwmvhpf70wwlfxmkfmfm8dargka4qgec2fkmxcpvr3tgkezxs2l6sf4t658)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p457zxv2j2yzn9ha42hxhf3fkqdz5pc5hykqevp765qrrsdn7vc4skd7hrr)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p457zxv2j2yzn9ha42hxhf3fkqdz5pc5hykqevp765qrrsdn7vc4skd7hrr)");
+
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/0h,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(spprv1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agqw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdgnemptj)",
+        "sp(sppub1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agpnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtss5pst7p)",
+        "sp(sppub1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agpnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtss5pst7p)");
+
+    // Check that xpubs are accepted for spend key
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        MISSING_PRIVKEYS);
+
+    CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
+        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
+        MISSING_PRIVKEYS);
+
+    CheckUnparsable("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)",
+        "sp(): key 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8' is not a valid sp key");
+    CheckUnparsable("sp(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(): Scan key must be a private key or extended private key");
+    CheckUnparsable("sp(spprv1qqqqqqqqqqqqqqqcw78khf9nvvgng9a0vsnzgz9hc29vqta5gwhwls59y60grpjpnvqryr9c920g3tru2cs3nazwqjdapvhx249ph95zkp3scsg957vzqag8ml0eq,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
+        "sp(sppub1qqqqqqqqqqqqqqqcw78khf9nvvgng9a0vsnzgz9hc29vqta5gwhwls59y60grpjpnvper07qpyg2fg4r32cfll4wytqcf9km7zzjaqd0aw69y2tdw0g2y2cklv80y,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)",
+        "sp(): key 'sppub1qqqqqqqqqqqqqqqcw78khf9nvvgng9a0vsnzgz9hc29vqta5gwhwls59y60grpjpnvper07qpyg2fg4r32cfll4wytqcf9km7zzjaqd0aw69y2tdw0g2y2cklv80y' is not valid");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

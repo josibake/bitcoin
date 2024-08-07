@@ -4,7 +4,7 @@ project(libsecp256k1
   # The package (a.k.a. release) version is based on semantic versioning 2.0.0 of
   # the API. All changes in experimental modules are treated as
   # backwards-compatible and therefore at most increase the minor version.
-  VERSION 0.5.1
+  VERSION 0.5.2
   DESCRIPTION "Optimized C library for ECDSA signatures and secret/public key operations on curve secp256k1."
   HOMEPAGE_URL "https://github.com/bitcoin-core/secp256k1"
   LANGUAGES C
@@ -27,7 +27,7 @@ endif()
 # All changes in experimental modules are treated as if they don't affect the
 # interface and therefore only increase the revision.
 set(${PROJECT_NAME}_LIB_VERSION_CURRENT 4)
-set(${PROJECT_NAME}_LIB_VERSION_REVISION 1)
+set(${PROJECT_NAME}_LIB_VERSION_REVISION 2)
 set(${PROJECT_NAME}_LIB_VERSION_AGE 2)
 
 set(CMAKE_C_STANDARD 90)
@@ -52,9 +52,14 @@ option(SECP256K1_ENABLE_MODULE_RECOVERY "Enable ECDSA pubkey recovery module." O
 option(SECP256K1_ENABLE_MODULE_EXTRAKEYS "Enable extrakeys module." ON)
 option(SECP256K1_ENABLE_MODULE_SCHNORRSIG "Enable schnorrsig module." ON)
 option(SECP256K1_ENABLE_MODULE_ELLSWIFT "Enable ElligatorSwift module." ON)
+option(SECP256K1_ENABLE_MODULE_SILENTPAYMENTS "Enable Silent Payments module." OFF)
 
 # Processing must be done in a topological sorting of the dependency graph
 # (dependent module first).
+if(SECP256K1_ENABLE_MODULE_SILENTPAYMENTS)
+  add_compile_definitions(ENABLE_MODULE_SILENTPAYMENTS=1)
+endif()
+
 if(SECP256K1_ENABLE_MODULE_ELLSWIFT)
   add_compile_definitions(ENABLE_MODULE_ELLSWIFT=1)
 endif()
@@ -298,6 +303,7 @@ message("  ECDSA pubkey recovery ............... ${SECP256K1_ENABLE_MODULE_RECOV
 message("  extrakeys ........................... ${SECP256K1_ENABLE_MODULE_EXTRAKEYS}")
 message("  schnorrsig .......................... ${SECP256K1_ENABLE_MODULE_SCHNORRSIG}")
 message("  ElligatorSwift ...................... ${SECP256K1_ENABLE_MODULE_ELLSWIFT}")
+message("  Silent Payments ..................... ${SECP256K1_ENABLE_MODULE_SILENTPAYMENTS}")
 message("Parameters:")
 message("  ecmult window size .................. ${SECP256K1_ECMULT_WINDOW_SIZE}")
 message("  ecmult gen table size ............... ${SECP256K1_ECMULT_GEN_KB} KiB")

@@ -291,6 +291,19 @@ public:
     //! Check whether this keypair is valid.
     bool IsValid() const { return !!m_keypair; }
 
+    /** GetKeyPairData
+     *
+     *  GetKeyPairData() is provided as a read-only method for passing a KeyPair object to secp256k1 functions
+     *  expecting a `secp256k1_keypair`. This avoids needing to create a temporary `secp256k1_keypair`
+     *  object by allowing the KeyPair to be passed directly in the following manner:
+     *
+     *      reinterpret_cast<const secp256k1_keypair*>(keypair.data())
+     *
+     *  This method is only be used for passing a KeyPair object as a secp256k1_keypair. For accessing to the
+     *  underlying keypair object, use secp256k1_keypair_* methods.
+     */
+    const unsigned char* GetKeyPairData() const { return IsValid() ? m_keypair->data() : nullptr; }
+
 private:
     KeyPair(const CKey& key, const uint256* merkle_root);
 

@@ -121,4 +121,4 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    SilentPaymentsReceivingTest().main()
+    SilentPaymentsReceivingTest(__file__).main()

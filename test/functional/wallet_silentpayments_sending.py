@@ -10,7 +10,7 @@ from test_framework.wallet import MiniWallet
 SILENT_PAYMENT_ADDRESS="sprt1qqtzwfsu4f34wejks0nxwzed3zq6vh53cg2rnxj9w6ncyrmy95dxx7qnvd47fskn470t9tl4z8a8nul5k3fztquqp4fjrarl7d5lphu7rk52s4hsp"
 
 
-class SilentTransactioTest(BitcoinTestFramework):
+class SilentPaymentsSendingTest(BitcoinTestFramework):
     def add_options(self, parser):
         self.add_wallet_options(parser)
 
@@ -163,4 +163,4 @@ class SilentTransactioTest(BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    SilentTransactioTest().main()
+    SilentPaymentsSendingTest(__file__).main()

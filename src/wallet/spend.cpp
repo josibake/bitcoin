@@ -1079,6 +1079,7 @@ bool IsInputForSharedSecretDerivation(const CScript& input, const CWallet& walle
         case TxoutType::MULTISIG:
         case TxoutType::PUBKEY:
         case TxoutType::NONSTANDARD:
+        case TxoutType::ANCHOR:
         case TxoutType::NULL_DATA: { return false; }
         case TxoutType::WITNESS_UNKNOWN:
             // This should never happen, as this step takes place after coin selection

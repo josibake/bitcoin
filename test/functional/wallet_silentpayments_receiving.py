@@ -135,10 +135,37 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         assert_approx(alice_wo.getbalance(), 10, 0.0001)
 
+    def test_rbf(self):
+        self.log.info("Check Silent Payments RBF")
+
+        self.nodes[0].createwallet(wallet_name="craig", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("craig")
+        address = wallet.getnewaddress(address_type="silent-payment")
+
+        txid = self.def_wallet.sendtoaddress(address, 49.99, replaceable=True)
+        assert_equal(self.nodes[0].getrawmempool(), [txid])
+        raw_tx = self.nodes[0].getrawtransaction(txid)
+        tx = self.nodes[0].decoderawtransaction(raw_tx)
+        assert_equal(len(tx["vin"]), 1)
+
+        psbt = self.def_wallet.psbtbumpfee(txid, fee_rate=10000)["psbt"]
+        decoded = self.nodes[0].decodepsbt(psbt)
+        assert_equal(len(decoded["tx"]["vin"]), 2)
+
+        res = self.def_wallet.walletprocesspsbt(psbt)
+        assert_equal(res["complete"], True)
+        txid = self.def_wallet.sendrawtransaction(res["hex"])
+        assert_equal(self.nodes[0].getrawmempool(), [txid])
+
+        assert_equal(wallet.getbalance(), 0)
+        self.generate(self.nodes[0], 1)
+        assert_approx(wallet.getbalance(), 49.99, 0.0001)
+
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
-        self.generate(self.nodes[0], 101)
+        self.generate(self.nodes[0], 102)
 
+        self.test_rbf()
         self.test_createwallet()
         self.test_encrypt_and_decrypt()
         self.test_encrypting_unencrypted()

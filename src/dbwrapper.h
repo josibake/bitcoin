@@ -69,33 +69,28 @@ const std::vector<unsigned char>& GetObfuscateKey(const CDBWrapperBase &w);
 bool DestroyDB(const std::string& path_str);
 
 /** Batch of changes queued to be written to a CDBWrapper */
-class CDBBatch
+class CDBBatchBase
 {
-    // TODO: What's the story here?
-    friend class CDBWrapperBase;
-    friend class CDBWrapper;
-
-private:
+protected:
     const CDBWrapperBase &parent;
-
-    struct WriteBatchImpl;
-    const std::unique_ptr<WriteBatchImpl> m_impl_batch;
 
     DataStream ssKey{};
     DataStream ssValue{};
 
     size_t size_estimate{0};
 
-    void WriteImpl(Span<const std::byte> key, DataStream& ssValue);
-    void EraseImpl(Span<const std::byte> key);
+    virtual void WriteImpl(Span<const std::byte> key, DataStream& ssValue) = 0;
+    virtual void EraseImpl(Span<const std::byte> key) = 0;
 
 public:
     /**
      * @param[in] _parent   CDBWrapper that this batch is to be submitted to
      */
-    explicit CDBBatch(const CDBWrapperBase& _parent);
-    ~CDBBatch();
-    void Clear();
+    explicit CDBBatchBase(const CDBWrapperBase& _parent) : parent{_parent} {}
+    virtual ~CDBBatchBase() = default;
+    virtual void Clear() = 0;
+
+    size_t SizeEstimate() const { return size_estimate; }
 
     template <typename K, typename V>
     void Write(const K& key, const V& value)
@@ -117,35 +112,46 @@ public:
         EraseImpl(ssKey);
         ssKey.clear();
     }
-
-    size_t SizeEstimate() const { return size_estimate; }
 };
 
-class CDBIterator
+class CDBWrapper;
+
+/** Batch of changes queued to be written to a CDBWrapper */
+class CDBBatch : public CDBBatchBase
 {
-public:
-    struct IteratorImpl;
+    // TODO: What's the story here?
+    friend class CDBWrapperBase;
+    friend class CDBWrapper;
 
 private:
-    const CDBWrapperBase &parent;
-    const std::unique_ptr<IteratorImpl> m_impl_iter;
+    struct WriteBatchImpl;
+    const std::unique_ptr<WriteBatchImpl> m_impl_batch;
 
-    void SeekImpl(Span<const std::byte> key);
-    Span<const std::byte> GetKeyImpl() const;
-    Span<const std::byte> GetValueImpl() const;
+    void WriteImpl(Span<const std::byte> key, DataStream& ssValue) override;
+    void EraseImpl(Span<const std::byte> key) override;
 
 public:
-
     /**
-     * @param[in] _parent          Parent CDBWrapper instance.
-     * @param[in] _piter           The original leveldb iterator.
+     * @param[in] _parent   CDBWrapper that this batch is to be submitted to
      */
-    CDBIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter);
-    ~CDBIterator();
+    explicit CDBBatch(const CDBWrapperBase& _parent);
+    ~CDBBatch() override;
+    void Clear() override;
+};
 
-    bool Valid() const;
+class CDBIteratorBase
+{
+protected:
+    const CDBWrapperBase &parent;
 
-    void SeekToFirst();
+    virtual void SeekImpl(Span<const std::byte> key) = 0;
+    virtual Span<const std::byte> GetKeyImpl() const = 0;
+    virtual Span<const std::byte> GetValueImpl() const = 0;
+public:
+    explicit CDBIteratorBase(const CDBWrapperBase& _parent)
+        : parent(_parent) {}
+    virtual ~CDBIteratorBase() = default;
+
 
     template<typename K> void Seek(const K& key) {
         DataStream ssKey{};
@@ -153,8 +159,6 @@ public:
         ssKey << key;
         SeekImpl(ssKey);
     }
-
-    void Next();
 
     template<typename K> bool GetKey(K& key) {
         try {
@@ -176,6 +180,35 @@ public:
         }
         return true;
     }
+
+    virtual bool Valid() const = 0;
+    virtual void SeekToFirst() = 0;
+    virtual void Next() = 0;
+};
+
+class CDBIterator : public CDBIteratorBase
+{
+public:
+    struct IteratorImpl;
+private:
+    const std::unique_ptr<IteratorImpl> m_impl_iter;
+
+    void SeekImpl(Span<const std::byte> key) override;
+    Span<const std::byte> GetKeyImpl() const override;
+    Span<const std::byte> GetValueImpl() const override;
+
+public:
+
+    /**
+     * @param[in] _parent          Parent CDBWrapper instance.
+     * @param[in] _piter           The original leveldb iterator.
+     */
+    CDBIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter);
+    ~CDBIterator() override;
+
+    bool Valid() const override;
+    void SeekToFirst() override;
+    void Next() override;
 };
 
 class CDBWrapperBase
@@ -215,8 +248,7 @@ protected:
     virtual bool ExistsImpl(Span<const std::byte> key) const = 0;
     virtual size_t EstimateSizeImpl(Span<const std::byte> key1, Span<const std::byte> key2) const = 0;
 
-    struct StatusImpl;
-    static void HandleError(const CDBWrapper::StatusImpl& _status);
+    virtual std::unique_ptr<CDBBatchBase> CreateBatch() const = 0;
 
 public:
     CDBWrapperBase(const CDBWrapperBase&) = delete;
@@ -247,9 +279,9 @@ public:
     template <typename K, typename V>
     bool Write(const K& key, const V& value, bool fSync = false)
     {
-        CDBBatch batch(*this);
-        batch.Write(key, value);
-        return WriteBatch(batch, fSync);
+        auto batch = CreateBatch();
+        batch->Write(key, value);
+        return WriteBatch(*batch, fSync);
     }
 
     //! @returns filesystem path to the on-disk data.
@@ -272,16 +304,15 @@ public:
     template <typename K>
     bool Erase(const K& key, bool fSync = false)
     {
-        CDBBatch batch(*this);
-        batch.Erase(key);
-        return WriteBatch(batch, fSync);
+        auto batch = CreateBatch();
+        batch->Erase(key);
+        return WriteBatch(*batch, fSync);
     }
 
-    virtual bool WriteBatch(CDBBatch& batch, bool fSync) = 0;
+    virtual bool WriteBatch(CDBBatchBase& batch, bool fSync) = 0;
 
     // Get an estimate of LevelDB memory usage (in bytes).
     virtual size_t DynamicMemoryUsage() const = 0;
-
 
     virtual CDBIterator* NewIterator() = 0;
 
@@ -300,7 +331,6 @@ public:
         ssKey2 << key_end;
         return EstimateSizeImpl(ssKey1, ssKey2);
     }
-
 };
 
 struct LevelDBContext;
@@ -316,11 +346,18 @@ private:
     bool ExistsImpl(Span<const std::byte> key) const override;
     size_t EstimateSizeImpl(Span<const std::byte> key1, Span<const std::byte> key2) const override;
 
+    inline std::unique_ptr<CDBBatchBase> CreateBatch() const override {
+        return std::make_unique<CDBBatch>(*this);
+    }
+
+    struct StatusImpl;
+    static void HandleError(const CDBWrapper::StatusImpl& _status);
+
 public:
     CDBWrapper(const DBParams& params);
     ~CDBWrapper() override;
 
-    bool WriteBatch(CDBBatch& batch, bool fSync = false) override;
+    bool WriteBatch(CDBBatchBase& batch, bool fSync = false) override;
     size_t DynamicMemoryUsage() const override;
 
     CDBIterator* NewIterator() override;

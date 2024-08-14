@@ -163,7 +163,7 @@ struct CDBBatch::WriteBatchImpl {
 };
 
 CDBBatch::CDBBatch(const CDBWrapperBase& _parent)
-    : parent{_parent},
+    : CDBBatchBase(_parent),
       m_impl_batch{std::make_unique<CDBBatch::WriteBatchImpl>()} {};
 
 CDBBatch::~CDBBatch() = default;
@@ -174,11 +174,11 @@ void CDBBatch::Clear()
     size_estimate = 0;
 }
 
-void CDBBatch::WriteImpl(Span<const std::byte> key, DataStream& ssValue)
+void CDBBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
 {
     leveldb::Slice slKey(CharCast(key.data()), key.size());
-    ssValue.Xor(dbwrapper_private::GetObfuscateKey(parent));
-    leveldb::Slice slValue(CharCast(ssValue.data()), ssValue.size());
+    value.Xor(dbwrapper_private::GetObfuscateKey(parent));
+    leveldb::Slice slValue(CharCast(value.data()), value.size());
     m_impl_batch->batch.Put(slKey, slValue);
     // LevelDB serializes writes as:
     // - byte: header
@@ -296,8 +296,9 @@ CDBWrapper::~CDBWrapper()
     DBContext().options.env = nullptr;
 }
 
-bool CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
+bool CDBWrapper::WriteBatch(CDBBatchBase& _batch, bool fSync)
 {
+    CDBBatch& batch = static_cast<CDBBatch&>(_batch);
     const bool log_memory = LogAcceptCategory(BCLog::LEVELDB, BCLog::Level::Debug);
     double mem_before = 0;
     if (log_memory) {
@@ -395,19 +396,13 @@ struct MDBXContext {
     mdbx::env_managed env;
 };
 
-MDBXWrapper::MDBXWrapper(const DBParams& params)
-    : CDBWrapperBase(params),
-    m_db_context{std::make_unique<MDBXContext>()}
-{
-}
-
 struct CDBIterator::IteratorImpl {
     const std::unique_ptr<leveldb::Iterator> iter;
 
     explicit IteratorImpl(leveldb::Iterator* _iter) : iter{_iter} {}
 };
 
-CDBIterator::CDBIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter) : parent(_parent),
+CDBIterator::CDBIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter): CDBIteratorBase(_parent),
                                                                                             m_impl_iter(std::move(_piter)) {}
 // TODO: CDBIterator should be generic?
 CDBIterator* CDBWrapper::NewIterator()

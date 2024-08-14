@@ -8,6 +8,7 @@
 #include <test/kernel/block_data.h>
 
 #include <cassert>
+#include <cstring>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -48,6 +49,16 @@ std::vector<unsigned char> hex_string_to_char_vec(const std::string& hex)
     }
 
     return bytes;
+}
+
+std::string span_to_hex_string(std::span<const unsigned char> bytes)
+{
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (unsigned char byte : bytes) {
+        oss << std::setw(2) << static_cast<int>(byte);
+    }
+    return oss.str();
 }
 
 class TestLog
@@ -448,6 +459,7 @@ void chainman_in_memory_test()
     assert(!std::filesystem::exists(in_memory_test_directory.m_directory / "chainstate"));
 }
 
+
 void chainman_mainnet_validation_test(TestDirectory& test_directory)
 {
     TestKernelNotifications notifications{};
@@ -497,6 +509,44 @@ void chainman_mainnet_validation_test(TestDirectory& test_directory)
     // If we try to validate it again, it should be a duplicate
     assert(!chainman->ProcessBlock(block, status));
     assert(status == kernel_PROCESS_BLOCK_DUPLICATE);
+
+    auto cursor = chainman->GetCoinsViewCursor();
+    assert(cursor);
+
+    // test the coins cursor
+    {
+        // After processing one block, we should have one entry in the coins db
+        auto prev_out_tx_hash(hex_string_to_char_vec("982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e"));
+        kernel_OutPoint prev_out_point {
+            .hash = {1},
+            .n = 0,
+        };
+        auto coin = chainman->GetCoinByOutPoint(&prev_out_point);
+        assert(!coin);
+
+        std::memcpy(prev_out_point.hash, prev_out_tx_hash.data(), 32);
+        coin = chainman->GetCoinByOutPoint(&prev_out_point);
+        assert(coin);
+        std::cout << span_to_hex_string(std::span{coin->out.script_pubkey, coin->out.script_pubkey_len}) << std::endl;
+        kernel_coin_destroy(coin);
+
+        // Check that we can also retrieve it by cursor
+        auto out_point = cursor.GetKey();
+        assert(out_point);
+        std::cout << span_to_hex_string(std::span{out_point->hash, 32}) << std::endl;
+        coin = cursor.GetValue();
+        assert(coin);
+        std::cout << span_to_hex_string(std::span{coin->out.script_pubkey, coin->out.script_pubkey_len}) << std::endl;
+        kernel_out_point_destroy(out_point);
+        kernel_coin_destroy(coin);
+
+        // The next entry should be invalid
+        assert(!cursor.Next());
+        out_point = cursor.GetKey();
+        assert(!out_point);
+        coin = cursor.GetValue();
+        assert(!coin);
+    }
 
     assert(validation_interface.Unregister(context));
 }

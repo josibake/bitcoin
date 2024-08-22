@@ -210,6 +210,9 @@ private:
     size_t EstimateSizeImpl(Span<const std::byte> key1, Span<const std::byte> key2) const;
     auto& DBContext() const LIFETIMEBOUND { return *Assert(m_db_context); }
 
+    struct StatusImpl;
+    static void HandleError(const CDBWrapper::StatusImpl& _status);
+
 public:
     CDBWrapper(const DBParams& params);
     ~CDBWrapper();
@@ -292,6 +295,7 @@ public:
         ssKey2 << key_end;
         return EstimateSizeImpl(ssKey1, ssKey2);
     }
+
 };
 
 #endif // BITCOIN_DBWRAPPER_H

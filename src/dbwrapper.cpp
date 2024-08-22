@@ -39,15 +39,21 @@ bool DestroyDB(const std::string& path_str)
     return leveldb::DestroyDB(path_str, {}).ok();
 }
 
+struct CDBWrapper::StatusImpl
+{
+    const leveldb::Status status;
+};
+
 /** Handle database error by throwing dbwrapper_error exception.
  */
-static void HandleError(const leveldb::Status& status)
+void CDBWrapper::HandleError(const CDBWrapper::StatusImpl& _status)
 {
+    const leveldb::Status& status = _status.status;
     if (status.ok())
         return;
     const std::string errmsg = "Fatal LevelDB error: " + status.ToString();
-    LogPrintf("%s\n", errmsg);
-    LogPrintf("You can use -debug=leveldb to get more complete diagnostic messages\n");
+    LogWarning("%s\n", errmsg);
+    LogWarning("You can use -debug=leveldb to get more complete diagnostic messages\n");
     throw dbwrapper_error(errmsg);
 }
 
@@ -234,7 +240,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     } else {
         if (params.wipe_data) {
             LogPrintf("Wiping LevelDB in %s\n", fs::PathToString(params.path));
-            leveldb::Status result = leveldb::DestroyDB(fs::PathToString(params.path), DBContext().options);
+            StatusImpl result{leveldb::DestroyDB(fs::PathToString(params.path), DBContext().options)};
             HandleError(result);
         }
         TryCreateDirectories(params.path);
@@ -244,7 +250,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     // because on POSIX leveldb passes the byte string directly to ::open(), and
     // on Windows it converts from UTF-8 to UTF-16 before calling ::CreateFileW
     // (see env_posix.cc and env_windows.cc).
-    leveldb::Status status = leveldb::DB::Open(DBContext().options, fs::PathToString(params.path), &DBContext().pdb);
+    StatusImpl status{leveldb::DB::Open(DBContext().options, fs::PathToString(params.path), &DBContext().pdb)};
     HandleError(status);
     LogPrintf("Opened LevelDB successfully\n");
 
@@ -295,7 +301,7 @@ bool CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
     if (log_memory) {
         mem_before = DynamicMemoryUsage() / 1024.0 / 1024;
     }
-    leveldb::Status status = DBContext().pdb->Write(fSync ? DBContext().syncoptions : DBContext().writeoptions, &batch.m_impl_batch->batch);
+    StatusImpl status{DBContext().pdb->Write(fSync ? DBContext().syncoptions : DBContext().writeoptions, &batch.m_impl_batch->batch)};
     HandleError(status);
     if (log_memory) {
         double mem_after = DynamicMemoryUsage() / 1024.0 / 1024;
@@ -344,7 +350,7 @@ std::optional<std::string> CDBWrapper::ReadImpl(Span<const std::byte> key) const
         if (status.IsNotFound())
             return std::nullopt;
         LogPrintf("LevelDB read failure: %s\n", status.ToString());
-        HandleError(status);
+        HandleError(StatusImpl{status});
     }
     return strValue;
 }
@@ -359,7 +365,7 @@ bool CDBWrapper::ExistsImpl(Span<const std::byte> key) const
         if (status.IsNotFound())
             return false;
         LogPrintf("LevelDB read failure: %s\n", status.ToString());
-        HandleError(status);
+        HandleError(StatusImpl{status});
     }
     return true;
 }

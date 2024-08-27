@@ -54,18 +54,6 @@ public:
 
 class CDBWrapperBase;
 
-/** These should be considered an implementation detail of the specific database.
- */
-namespace dbwrapper_private {
-
-/** Work around circular dependency, as well as for testing in dbwrapper_tests.
- * Database obfuscation should be considered an implementation detail of the
- * specific database.
- */
-const std::vector<unsigned char>& GetObfuscateKey(const CDBWrapperBase &w);
-
-}; // namespace dbwrapper_private
-
 bool DestroyDB(const std::string& path_str);
 
 /** Batch of changes queued to be written to a CDBWrapper */
@@ -119,7 +107,6 @@ class CDBWrapper;
 /** Batch of changes queued to be written to a CDBWrapper */
 class CDBBatch : public CDBBatchBase
 {
-    // TODO: What's the story here?
     friend class CDBWrapperBase;
     friend class CDBWrapper;
 
@@ -170,16 +157,7 @@ public:
         return true;
     }
 
-    template<typename V> bool GetValue(V& value) {
-        try {
-            DataStream ssValue{GetValueImpl()};
-            ssValue.Xor(dbwrapper_private::GetObfuscateKey(parent));
-            ssValue >> value;
-        } catch (const std::exception&) {
-            return false;
-        }
-        return true;
-    }
+    template<typename V> bool GetValue(V& value);
 
     virtual bool Valid() const = 0;
     virtual void SeekToFirst() = 0;
@@ -213,15 +191,12 @@ public:
 
 class CDBWrapperBase
 {
-    friend const std::vector<unsigned char>& dbwrapper_private::GetObfuscateKey(const CDBWrapperBase &w);
-
 protected:
     CDBWrapperBase(const DBParams& params)
         : m_name(fs::PathToString(params.path.stem())),
           m_path(params.path),
           m_is_memory(params.memory_only)
     {
-        obfuscate_key = CreateObfuscateKey();
     }
 
     //! the name of this database
@@ -237,6 +212,8 @@ protected:
     static const unsigned int OBFUSCATE_KEY_NUM_BYTES;
 
     std::vector<unsigned char> CreateObfuscateKey() const;
+
+    bool WriteObfuscateKeyIfNotExists();
 
     //! path to filesystem storage
     const fs::path m_path;
@@ -255,6 +232,8 @@ public:
     CDBWrapperBase& operator=(const CDBWrapperBase&) = delete;
 
     virtual ~CDBWrapperBase() = default;
+
+    const std::vector<unsigned char>& GetObfuscateKey() const;
 
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
@@ -362,6 +341,8 @@ public:
 
     CDBIteratorBase* NewIterator() override;
     bool IsEmpty() override;
+
+    static bool DestroyDB(const std::string& path_str);
 };
 
 struct MDBXContext;
@@ -396,7 +377,7 @@ class MDBXIterator : public CDBIteratorBase
 {
 public:
     struct IteratorImpl;
-    private:
+private:
     const std::unique_ptr<IteratorImpl> m_impl_iter;
 
     void SeekImpl(Span<const std::byte> key) override;
@@ -448,6 +429,19 @@ public:
      * Return true if the database managed by this class contains no entries.
      */
     bool IsEmpty() override;
+
+    static bool DestroyDB(const std::string& path_str);
 };
+
+template<typename V> bool CDBIteratorBase::GetValue(V& value) {
+    try {
+        DataStream ssValue{GetValueImpl()};
+        ssValue.Xor(parent.GetObfuscateKey());
+        ssValue >> value;
+    } catch (const std::exception&) {
+        return false;
+    }
+    return true;
+}
 
 #endif // BITCOIN_DBWRAPPER_H

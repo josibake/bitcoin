@@ -9,7 +9,6 @@
 #include <index/base.h>
 
 class CBlockIndex;
-class CDBBatch;
 namespace kernel {
 struct CCoinsStats;
 }

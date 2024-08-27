@@ -288,7 +288,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
     return true;
 }
 
-[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIteratorBase& db_it, CDBBatch& batch,
+[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIteratorBase& db_it, CDBBatchBase& batch,
                                        const std::string& index_name,
                                        int start_height, int stop_height)
 {
@@ -318,7 +318,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
 
 bool BlockFilterIndex::CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip)
 {
-    CDBBatch batch(*m_db);
+    MDBXBatch batch(*m_db);
     std::unique_ptr<CDBIteratorBase> db_it(m_db->NewIterator());
 
     // During a reorg, we need to copy all filters for blocks that are getting disconnected from the

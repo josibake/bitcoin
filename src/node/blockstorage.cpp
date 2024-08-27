@@ -77,7 +77,7 @@ bool BlockTreeDB::ReadLastBlockFile(int& nFile)
 
 bool BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*>>& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo)
 {
-    CDBBatch batch(*this);
+    MDBXBatch batch(*this);
     for (const auto& [file, info] : fileInfo) {
         batch.Write(std::make_pair(DB_BLOCK_FILES, file), *info);
     }

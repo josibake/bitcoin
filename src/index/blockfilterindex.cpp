@@ -288,7 +288,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
     return true;
 }
 
-[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
+[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIteratorBase& db_it, CDBBatch& batch,
                                        const std::string& index_name,
                                        int start_height, int stop_height)
 {
@@ -319,7 +319,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
 bool BlockFilterIndex::CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip)
 {
     CDBBatch batch(*m_db);
-    std::unique_ptr<CDBIterator> db_it(m_db->NewIterator());
+    std::unique_ptr<CDBIteratorBase> db_it(m_db->NewIterator());
 
     // During a reorg, we need to copy all filters for blocks that are getting disconnected from the
     // height index to the hash index so we can still find them when the height index entries are
@@ -374,7 +374,7 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
     std::vector<std::pair<uint256, DBVal>> values(results_size);
 
     DBHeightKey key(start_height);
-    std::unique_ptr<CDBIterator> db_it(db.NewIterator());
+    std::unique_ptr<CDBIteratorBase> db_it(db.NewIterator());
     db_it->Seek(DBHeightKey(start_height));
     for (int height = start_height; height <= stop_index->nHeight; ++height) {
         if (!db_it->Valid() || !db_it->GetKey(key) || key.height != height) {

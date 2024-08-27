@@ -177,7 +177,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         uint256 in2 = m_rng.rand256();
         BOOST_CHECK(dbw.Write(key2, in2));
 
-        std::unique_ptr<CDBIterator> it(const_cast<CDBWrapper&>(dbw).NewIterator());
+        std::unique_ptr<CDBIteratorBase> it(const_cast<CDBWrapper&>(dbw).NewIterator());
 
         // Be sure to seek past the obfuscation key (if it exists)
         it->Seek(key);
@@ -291,7 +291,7 @@ BOOST_AUTO_TEST_CASE(iterator_ordering)
     }
 
     // Check that creating an iterator creates a snapshot
-    std::unique_ptr<CDBIterator> it(const_cast<CDBWrapper&>(dbw).NewIterator());
+    std::unique_ptr<CDBIteratorBase> it(const_cast<CDBWrapper&>(dbw).NewIterator());
 
     for (unsigned int x=0x00; x<256; ++x) {
         uint8_t key = x;
@@ -362,7 +362,7 @@ BOOST_AUTO_TEST_CASE(iterator_string_ordering)
         }
     }
 
-    std::unique_ptr<CDBIterator> it(const_cast<CDBWrapper&>(dbw).NewIterator());
+    std::unique_ptr<CDBIteratorBase> it(const_cast<CDBWrapper&>(dbw).NewIterator());
     for (const int seek_start : {0, 5}) {
         it->Seek(StringContentsSerializer{ToString(seek_start)});
         for (unsigned int x = seek_start; x < 10; ++x) {

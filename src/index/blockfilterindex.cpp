@@ -141,7 +141,7 @@ bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockKey>& blo
     return true;
 }
 
-bool BlockFilterIndex::CustomCommit(CDBBatch& batch)
+bool BlockFilterIndex::CustomCommit(CDBBatchBase& batch)
 {
     const FlatFilePos& pos = m_next_filter_pos;
 
@@ -339,7 +339,7 @@ bool BlockFilterIndex::CustomRewind(const interfaces::BlockKey& current_tip, con
     return true;
 }
 
-static bool LookupOne(const CDBWrapper& db, const CBlockIndex* block_index, DBVal& result)
+static bool LookupOne(const CDBWrapperBase& db, const CBlockIndex* block_index, DBVal& result)
 {
     // First check if the result is stored under the height index and the value there matches the
     // block hash. This should be the case if the block is on the active chain.
@@ -357,7 +357,7 @@ static bool LookupOne(const CDBWrapper& db, const CBlockIndex* block_index, DBVa
     return db.Read(DBHashKey(block_index->GetBlockHash()), result);
 }
 
-static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start_height,
+static bool LookupRange(CDBWrapperBase& db, const std::string& index_name, int start_height,
                         const CBlockIndex* stop_index, std::vector<DBVal>& results)
 {
     if (start_height < 0) {

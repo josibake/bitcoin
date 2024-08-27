@@ -45,7 +45,7 @@ private:
 protected:
     bool CustomInit(const std::optional<interfaces::BlockKey>& block) override;
 
-    bool CustomCommit(CDBBatch& batch) override;
+    bool CustomCommit(CDBBatchBase& batch) override;
 
     bool CustomAppend(const interfaces::BlockInfo& block) override;
 

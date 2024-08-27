@@ -237,7 +237,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
     return m_db->Write(DBHeightKey(block.height), value);
 }
 
-[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIteratorBase& db_it, CDBBatch& batch,
+[[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIteratorBase& db_it, CDBBatchBase& batch,
                                        const std::string& index_name,
                                        int start_height, int stop_height)
 {
@@ -304,7 +304,7 @@ bool CoinStatsIndex::CustomRewind(const interfaces::BlockKey& current_tip, const
     return true;
 }
 
-static bool LookUpOne(const CDBWrapper& db, const interfaces::BlockKey& block, DBVal& result)
+static bool LookUpOne(const CDBWrapperBase& db, const interfaces::BlockKey& block, DBVal& result)
 {
     // First check if the result is stored under the height index and the value
     // there matches the block hash. This should be the case if the block is on
@@ -396,7 +396,7 @@ bool CoinStatsIndex::CustomInit(const std::optional<interfaces::BlockKey>& block
     return true;
 }
 
-bool CoinStatsIndex::CustomCommit(CDBBatch& batch)
+bool CoinStatsIndex::CustomCommit(CDBBatchBase& batch)
 {
     // DB_MUHASH should always be committed in a batch together with DB_BEST_BLOCK
     // to prevent an inconsistent state of the DB.

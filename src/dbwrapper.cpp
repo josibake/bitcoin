@@ -545,7 +545,6 @@ MDBXBatch::~MDBXBatch()
 void MDBXBatch::Clear()
 {
     m_impl_batch->txn.abort();
-    size_estimate = 0;
 }
 
 void MDBXBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
@@ -562,21 +561,17 @@ void MDBXBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
         std::cout << errmsg << std::endl;
         throw dbwrapper_error(errmsg);
     }
-
-    // LevelDB serializes writes as:
-    // - byte: header
-    // - varint: key length (1 byte up to 127B, 2 bytes up to 16383B, ...)
-    // - byte[]: key
-    // - varint: value length
-    // - byte[]: value
-    // The formula below assumes the key and value are both less than 16k.
-    // size_estimate += 3 + (slKey.size() > 127) + slKey.size() + (slValue.size() > 127) + slValue.size();
 }
 
 void MDBXBatch::EraseImpl(Span<const std::byte> key)
 {
     mdbx::slice slKey(CharCast(key.data()), key.size());
     m_impl_batch->txn.erase(m_impl_batch->map, slKey);
+}
+
+size_t MDBXBatch::SizeEstimate() const
+{
+    return m_impl_batch->txn.size_current();
 }
 
 struct MDBXIterator::IteratorImpl {

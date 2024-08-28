@@ -54,8 +54,6 @@ public:
 
 class CDBWrapperBase;
 
-bool DestroyDB(const std::string& path_str);
-
 /** Batch of changes queued to be written to a CDBWrapper */
 class CDBBatchBase
 {
@@ -64,8 +62,6 @@ protected:
 
     DataStream ssKey{};
     DataStream ssValue{};
-
-    size_t size_estimate{0};
 
     virtual void WriteImpl(Span<const std::byte> key, DataStream& ssVal) = 0;
     virtual void EraseImpl(Span<const std::byte> key) = 0;
@@ -78,7 +74,7 @@ public:
     virtual ~CDBBatchBase() = default;
     virtual void Clear() = 0;
 
-    size_t SizeEstimate() const { return size_estimate; }
+    virtual size_t SizeEstimate() const  = 0;
 
     template <typename K, typename V>
     void Write(const K& key, const V& value)
@@ -114,6 +110,8 @@ private:
     struct WriteBatchImpl;
     const std::unique_ptr<WriteBatchImpl> m_impl_batch;
 
+    size_t size_estimate{0};
+
     void WriteImpl(Span<const std::byte> key, DataStream& ssVal) override;
     void EraseImpl(Span<const std::byte> key) override;
 
@@ -124,6 +122,8 @@ public:
     explicit CDBBatch(const CDBWrapperBase& _parent);
     ~CDBBatch() override;
     void Clear() override;
+
+    size_t SizeEstimate() const override { return size_estimate; }
 };
 
 class CDBIteratorBase
@@ -370,6 +370,8 @@ public:
     explicit MDBXBatch(const CDBWrapperBase& _parent);
     ~MDBXBatch();
     void Clear() override;
+
+    size_t SizeEstimate() const override;
 };
 
 /** An iterator that maps to MDBX's cursor */

@@ -379,6 +379,7 @@ public:
     struct IteratorImpl;
 private:
     const std::unique_ptr<IteratorImpl> m_impl_iter;
+    bool valid;
 
     void SeekImpl(Span<const std::byte> key) override;
     Span<const std::byte> GetKeyImpl() const override;

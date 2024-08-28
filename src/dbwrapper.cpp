@@ -590,7 +590,7 @@ MDBXIterator::MDBXIterator(const CDBWrapperBase& _parent, std::unique_ptr<Iterat
 void MDBXIterator::SeekImpl(Span<const std::byte> key)
 {
     mdbx::slice slKey(CharCast(key.data()), key.size());
-    m_impl_iter->cursor->seek(slKey);
+    valid = m_impl_iter->cursor->seek(slKey);
 }
 
 CDBIteratorBase* MDBXWrapper::NewIterator()
@@ -658,17 +658,17 @@ Span<const std::byte> MDBXIterator::GetValueImpl() const
 MDBXIterator::~MDBXIterator() = default;
 
 bool MDBXIterator::Valid() const {
-    return false;
+    return valid;
 }
 
 void MDBXIterator::SeekToFirst()
 {
-    m_impl_iter->cursor->to_first();
+    valid = m_impl_iter->cursor->to_first(/*throw_notfound=*/false).done;
 }
 
 void MDBXIterator::Next()
 {
-    m_impl_iter->cursor->to_next();
+    valid = m_impl_iter->cursor->to_next(/*throw_notfound=*/false).done;
 }
 
 const std::vector<unsigned char>& CDBWrapperBase::GetObfuscateKey() const

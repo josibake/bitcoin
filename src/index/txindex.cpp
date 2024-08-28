@@ -41,7 +41,7 @@ bool TxIndex::DB::ReadTxPos(const uint256 &txid, CDiskTxPos& pos) const
 
 bool TxIndex::DB::WriteTxs(const std::vector<std::pair<uint256, CDiskTxPos>>& v_pos)
 {
-    MDBXBatch batch(*this);
+    CDBBatch batch(*this);
     for (const auto& tuple : v_pos) {
         batch.Write(std::make_pair(DB_TXINDEX, tuple.first), tuple.second);
     }

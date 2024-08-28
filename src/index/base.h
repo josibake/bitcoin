@@ -48,7 +48,7 @@ protected:
      * and block index entries may not be flushed to disk until after this database
      * is updated.
     */
-    class DB : public MDBXWrapper
+    class DB : public CDBWrapper
     {
     public:
         DB(const fs::path& path, size_t n_cache_size,

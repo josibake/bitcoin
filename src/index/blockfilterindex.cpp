@@ -318,7 +318,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
 
 bool BlockFilterIndex::CustomRewind(const interfaces::BlockKey& current_tip, const interfaces::BlockKey& new_tip)
 {
-    MDBXBatch batch(*m_db);
+    CDBBatch batch(*m_db);
     std::unique_ptr<CDBIteratorBase> db_it(m_db->NewIterator());
 
     // During a reorg, we need to copy all filters for blocks that are getting disconnected from the

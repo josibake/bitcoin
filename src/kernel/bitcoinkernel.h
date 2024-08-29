@@ -260,6 +260,16 @@ typedef struct kernel_BlockHeader kernel_BlockHeader;
  */
 typedef struct kernel_Transaction kernel_Transaction;
 
+/**
+ * Opaque data structure for holding a mempool options. This is passed through
+ * the context options to the context. The context then instantiates a mempool.
+ * When loading the chainstate in the chainstate manager, the context passes a
+ * pointer of the mempool to the chainstate. The chainstate then uses it for
+ * processing transactions. It may be destroyed once passed to the context
+ * options.
+ */
+typedef struct kernel_MempoolOptions kernel_MempoolOptions;
+
 /** Current sync state passed to tip changed callbacks. */
 typedef enum {
     kernel_INIT_REINDEX,
@@ -315,6 +325,8 @@ typedef enum {
                                         //!< pointer to a kernel_Notifications struct.
     kernel_TASK_RUNNER_OPTION,          //!< Set the task runner, value must be a valid pointer to a
                                         //!< kernel_TaskRunner struct.
+    kernel_MEMPOOL_OPTION,              //!< Set the mempool, value must be a valid pointer to a
+                                        //!< kernel_MempoolOptions struct.
 } kernel_ContextOptionType;
 
 /**
@@ -671,6 +683,16 @@ kernel_Notifications* BITCOINKERNEL_WARN_UNUSED_RESULT kernel_notifications_crea
  * Destroy the kernel notifications.
  */
 void kernel_notifications_destroy(const kernel_Notifications* notifications);
+
+/**
+ * @brief Create an opaque kernel mempool.
+ */
+kernel_MempoolOptions* BITCOINKERNEL_WARN_UNUSED_RESULT kernel_mempool_options_create();
+
+/**
+ * Destroy the kernel mempool options.
+ */
+void kernel_mempool_options_destroy(const kernel_MempoolOptions* mempool);
 
 /**
  * Creates an empty context options.

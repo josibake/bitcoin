@@ -63,6 +63,7 @@ namespace {
 constexpr uint64_t KERNEL_CHAIN_PARAMS_TAG{0};
 constexpr uint64_t KERNEL_NOTIFICATIONS_TAG{1};
 constexpr uint64_t KERNEL_TASK_RUNNER_TAG{2};
+constexpr uint64_t KERNEL_MEMPOOL_OPTIONS_TAG{3};
 
 /** A class that deserializes a single CTransaction one time. */
 class TxInputStream
@@ -195,6 +196,25 @@ public:
     }
 };
 
+class KernelMempoolOptions
+{
+    uint64_t m_tag;
+
+public:
+    CTxMemPool::Options m_mempool_options;
+
+    KernelMempoolOptions()
+        : m_tag{KERNEL_MEMPOOL_OPTIONS_TAG},
+          m_mempool_options{CTxMemPool::Options{}}
+    {
+    }
+
+    bool IsValid() const
+    {
+        return m_tag == KERNEL_MEMPOOL_OPTIONS_TAG;
+    }
+};
+
 kernel_SynchronizationState cast_state(SynchronizationState state)
 {
     switch (state) {
@@ -310,6 +330,7 @@ struct ContextOptions {
     std::unique_ptr<const KernelNotifications> m_notifications;
     std::unique_ptr<const CChainParams> m_chainparams;
     std::unique_ptr<TaskRunner> m_task_runner;
+    std::unique_ptr<const CTxMemPool::Options> m_mempool_options;
 };
 
 class Context
@@ -324,6 +345,8 @@ public:
     std::unique_ptr<util::SignalInterrupt> m_interrupt;
 
     std::unique_ptr<const CChainParams> m_chainparams;
+
+    std::unique_ptr<CTxMemPool> m_mempool;
 
     Context(const ContextOptions* options, bool& sane)
         : m_context{std::make_unique<kernel::Context>()},
@@ -346,6 +369,17 @@ public:
             m_signals = std::make_unique<ValidationSignals>(std::make_unique<TaskRunner>(*options->m_task_runner));
         } else {
             m_signals = nullptr;
+        }
+
+        if (options && options->m_mempool_options) {
+            bilingual_str mempool_err;
+            m_mempool = std::make_unique<CTxMemPool>(*options->m_mempool_options, mempool_err);
+            if (!mempool_err.empty()) {
+                LogError("Failed to construct a chainstate manager: %s", mempool_err.original);
+                sane = false;
+            }
+        } else {
+            m_mempool = nullptr;
         }
 
         if (!kernel::SanityChecks(*m_context)) {
@@ -388,6 +422,12 @@ const KernelChainParams* cast_const_chain_params(const kernel_ChainParameters* c
 {
     assert(chain_params);
     return reinterpret_cast<const KernelChainParams*>(chain_params);
+}
+
+const KernelMempoolOptions* cast_const_mempool_options(const kernel_MempoolOptions* mempool)
+{
+    assert(mempool);
+    return reinterpret_cast<const KernelMempoolOptions*>(mempool);
 }
 
 const KernelNotifications* cast_const_notifications(const kernel_Notifications* notifications)
@@ -684,6 +724,18 @@ void kernel_notifications_destroy(const kernel_Notifications* notifications)
     }
 }
 
+kernel_MempoolOptions* kernel_mempool_options_create()
+{
+    return reinterpret_cast<kernel_MempoolOptions*>(new KernelMempoolOptions{});
+}
+
+void kernel_mempool_options_destroy(const kernel_MempoolOptions* mempool_options)
+{
+    if (mempool_options) {
+        delete cast_const_mempool_options(mempool_options);
+    }
+}
+
 kernel_ContextOptions* kernel_context_options_create()
 {
     return reinterpret_cast<kernel_ContextOptions*>(new ContextOptions{});
@@ -721,6 +773,15 @@ bool kernel_context_options_set(kernel_ContextOptions* options_, const kernel_Co
         }
         // Copy the task runner, so the caller can free it again.
         options->m_task_runner = std::make_unique<TaskRunner>(*task_runner);
+        return true;
+    }
+    case kernel_ContextOptionType::kernel_MEMPOOL_OPTION: {
+        auto mempool_opts{reinterpret_cast<const KernelMempoolOptions*>(value)};
+        if (!mempool_opts->IsValid()) {
+            LogError("Selected mempool option context option, but the value is not a valid mempool options struct.\n");
+            return false;
+        }
+        options->m_mempool_options = std::make_unique<const CTxMemPool::Options>(mempool_opts->m_mempool_options);
         return true;
     }
     } // no default case, so the compiler can warn about missing cases
@@ -976,10 +1037,15 @@ bool kernel_chainstate_manager_load_chainstate(const kernel_Context* context_,
     try {
         auto& chainstate_load_opts{*cast_chainstate_load_options(chainstate_load_opts_)};
         auto& chainman{*cast_chainstate_manager(chainman_)};
+        auto& context{*cast_const_context(context_)};
 
         if (chainstate_load_opts.wipe_block_tree_db && !chainstate_load_opts.wipe_chainstate_db) {
             LogError("Wiping the block tree db without also wiping the chainstate db is currently unsupported.\n");
             return false;
+        }
+
+        if (context.m_mempool) {
+            chainstate_load_opts.mempool = context.m_mempool.get();
         }
 
         node::CacheSizes cache_sizes;

@@ -369,7 +369,11 @@ void context_test()
     }
 }
 
-Context create_context(TestKernelNotifications& notifications, kernel_ChainType chain_type, TestTaskRunner* task_runner = nullptr)
+Context create_context(
+    TestKernelNotifications& notifications,
+    kernel_ChainType chain_type,
+    TestTaskRunner* task_runner = nullptr,
+    bool with_mempool = false)
 {
     ContextOptions options{};
     ChainParams params{chain_type};
@@ -378,6 +382,11 @@ Context create_context(TestKernelNotifications& notifications, kernel_ChainType 
     if (task_runner) {
         assert(options.SetTaskRunner(*task_runner));
     }
+    if (with_mempool) {
+        MempoolOptions mempool_options{};
+        assert(options.SetMempoolOptions(mempool_options));
+    }
+
     return Context{options};
 }
 
@@ -560,7 +569,7 @@ void chainman_regtest_validation_test()
     auto test_directory{TestDirectory{"regtest_test_bitcoin_kernel"}};
 
     TestKernelNotifications notifications{};
-    auto context{create_context(notifications, kernel_ChainType::kernel_CHAIN_TYPE_REGTEST)};
+    auto context{create_context(notifications, kernel_ChainType::kernel_CHAIN_TYPE_REGTEST, nullptr, true)};
 
     // Do some serialization sanity-checks for the headers
     auto header{Block{REGTEST_BLOCK_DATA[0]}.GetBlockHeader()};

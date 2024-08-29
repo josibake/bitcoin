@@ -122,6 +122,24 @@ public:
     friend class ContextOptions;
 };
 
+class MempoolOptions
+{
+private:
+    struct Deleter {
+        void operator()(const kernel_MempoolOptions* ptr) const
+        {
+            kernel_mempool_options_destroy(ptr);
+        }
+    };
+
+    std::unique_ptr<const kernel_MempoolOptions, Deleter> m_mempool_options;
+
+public:
+    MempoolOptions() noexcept : m_mempool_options{kernel_mempool_options_create()} {}
+
+    friend class ContextOptions;
+};
+
 class ChainParams
 {
 private:
@@ -219,6 +237,14 @@ public:
             m_options.get(),
             kernel_ContextOptionType::kernel_TASK_RUNNER_OPTION,
             task_runner.m_task_runner.get());
+    }
+
+    bool SetMempoolOptions(MempoolOptions& mempool_options) const noexcept
+    {
+        return kernel_context_options_set(
+            m_options.get(),
+            kernel_ContextOptionType::kernel_MEMPOOL_OPTION,
+            mempool_options.m_mempool_options.get());
     }
 
     friend class Context;
@@ -541,12 +567,12 @@ public:
         return kernel_get_block_header(m_block.get());
     }    
 
-    size_t GetNumberOfTransactions() const
+    size_t GetNumberOfTransactions() const noexcept
     {
         return kernel_number_of_transactions_in_block(m_block.get());
     }
 
-    Transaction GetTransaction(uint64_t index) const
+    Transaction GetTransaction(uint64_t index) const noexcept
     {
         return Transaction{kernel_get_transaction_by_index(m_block.get(), index)};
     }

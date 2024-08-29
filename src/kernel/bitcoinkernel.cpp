@@ -1367,6 +1367,20 @@ bool kernel_chainstate_manager_process_block_header(const kernel_Context* contex
     return chainman.ProcessNewBlockHeaders(headers, true, state);
 }
 
+bool kernel_chainstate_manager_process_transaction(
+    const kernel_Context* context,
+    kernel_ChainstateManager* chainman_,
+    kernel_Transaction* transaction_,
+    bool test_accept)
+{
+    auto& chainman{*cast_chainstate_manager(chainman_)};
+    auto transaction{cast_transaction_ref(transaction_)};
+
+    MempoolAcceptResult res = WITH_LOCK(::cs_main, return chainman.ProcessTransaction(*transaction, test_accept));
+
+    return res.m_result_type ==  MempoolAcceptResult::ResultType::VALID;
+}
+
 bool kernel_chainstate_manager_process_block(
     const kernel_Context* context_,
     kernel_ChainstateManager* chainman_,

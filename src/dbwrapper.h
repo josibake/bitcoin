@@ -72,7 +72,7 @@ public:
      */
     explicit CDBBatchBase(const CDBWrapperBase& _parent) : m_parent{_parent} {}
     virtual ~CDBBatchBase() = default;
-    virtual void Clear() = 0;
+    // virtual void Clear() = 0;
 
     virtual size_t SizeEstimate() const  = 0;
 
@@ -121,7 +121,7 @@ public:
      */
     explicit CDBBatch(const CDBWrapperBase& _parent);
     ~CDBBatch() override;
-    void Clear() override;
+    // void Clear() override;
 
     size_t SizeEstimate() const override { return size_estimate; }
 };
@@ -369,7 +369,8 @@ public:
      */
     explicit MDBXBatch(const CDBWrapperBase& _parent);
     ~MDBXBatch();
-    void Clear() override;
+    // void Clear() override;
+    void ResetAfterCommit();
 
     size_t SizeEstimate() const override;
 };

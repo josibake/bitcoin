@@ -173,12 +173,6 @@ CDBBatch::CDBBatch(const CDBWrapperBase& _parent)
 
 CDBBatch::~CDBBatch() = default;
 
-void CDBBatch::Clear()
-{
-    m_impl_batch->batch.Clear();
-    size_estimate = 0;
-}
-
 void CDBBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
 {
     leveldb::Slice slKey(CharCast(key.data()), key.size());
@@ -511,10 +505,12 @@ bool MDBXWrapper::WriteBatch(CDBBatchBase& _batch, bool fSync)
     batch.m_impl_batch->txn.commit();
 
     if(fSync) {
-        Sync();
+        // Sync();
     }
 
     DBContext().read_txn.renew_reading();
+    batch.ResetAfterCommit();
+
     return true;
 }
 
@@ -530,7 +526,6 @@ MDBXBatch::MDBXBatch (const CDBWrapperBase& _parent) : CDBBatchBase(_parent)
     const MDBXWrapper& parent = static_cast<const MDBXWrapper&>(m_parent);
     m_impl_batch = std::make_unique<MDBXWriteBatchImpl>();
 
-    // MDBXBatch is a wrapper for LMDB/MDBX's txn
     m_impl_batch->txn = parent.DBContext().env.start_write();
     m_impl_batch->map = m_impl_batch->txn.create_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
 };
@@ -542,9 +537,14 @@ MDBXBatch::~MDBXBatch()
     }
 }
 
-void MDBXBatch::Clear()
+void MDBXBatch::ResetAfterCommit()
 {
-    m_impl_batch->txn.abort();
+    // Destruct MDBXWriteBatchImpl and construct new one
+    m_impl_batch.reset(new MDBXWriteBatchImpl);
+
+    auto &parent = static_cast<const MDBXWrapper&>(m_parent);
+    m_impl_batch->txn = parent.DBContext().env.start_write();
+    m_impl_batch->map = m_impl_batch->txn.create_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
 }
 
 void MDBXBatch::WriteImpl(Span<const std::byte> key, DataStream& value)

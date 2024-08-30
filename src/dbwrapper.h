@@ -357,9 +357,6 @@ class MDBXBatch : public CDBBatchBase
     friend class MDBXWrapper;
 
 private:
-    struct MDBXWriteBatchImpl;
-    std::unique_ptr<MDBXWriteBatchImpl> m_impl_batch;
-
     void WriteImpl(Span<const std::byte> key, DataStream& value) override;
     void EraseImpl(Span<const std::byte> key) override;
 
@@ -368,7 +365,7 @@ public:
      * @param[in] _parent   CDBWrapper that this batch is to be submitted to
      */
     explicit MDBXBatch(const CDBWrapperBase& _parent);
-    ~MDBXBatch();
+    ~MDBXBatch() = default;
     // void Clear() override;
     void ResetAfterCommit();
 

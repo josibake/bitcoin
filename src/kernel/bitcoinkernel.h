@@ -1397,6 +1397,17 @@ kernel_Transaction* BITCOINKERNEL_WARN_UNUSED_RESULT kernel_transaction_create(
  */
 void kernel_transaction_destroy(kernel_Transaction* transaction);
 
+/**
+ * @brief Check if the chainstate manager is busy loading blocks from disk. This
+ * may be the case when reindexing, or importing block files from disk.
+ *
+ * @param[in] chainman Non-null.
+ * @return             True if the chainstate manager is busy loading blocks.
+ */
+bool BITCOINKERNEL_WARN_UNUSED_RESULT kernel_loading_blocks(
+    kernel_ChainstateManager* chainman
+) BITCOINKERNEL_ARG_NONNULL(1);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif // __cplusplus

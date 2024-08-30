@@ -1667,3 +1667,8 @@ void kernel_transaction_destroy(kernel_Transaction* transaction)
         delete cast_transaction_ref(transaction);
     }
 }
+
+bool kernel_loading_blocks(kernel_ChainstateManager* chainman)
+{
+    return cast_chainstate_manager(chainman)->m_blockman.LoadingBlocks();
+}

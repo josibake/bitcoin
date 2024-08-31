@@ -410,7 +410,9 @@ struct MDBXContext {
     mdbx::map_handle map;
 
     ~MDBXContext() {
-        read_txn.abort();
+        if(read_txn){
+            read_txn.abort();
+        }
         env.close();
     }
 };
@@ -432,6 +434,8 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     // We need this because of some unpleasant (for us) passing around of the
     // Chainstate between threads during initialization.
     DBContext().operate_params.options.no_sticky_threads = true;
+    DBContext().operate_params.durability = mdbx::env::whole_fragile;
+
     // initialize the mdbx environment.
     DBContext().env = mdbx::env_managed(params.path, DBContext().create_params, DBContext().operate_params);
 
@@ -439,7 +443,7 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     DBContext().map = DBContext().read_txn.open_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
 
     // Open readers induce really ugly append-only LMDB behavior
-    DBContext().read_txn.reset_reading();
+    DBContext().read_txn.abort();
 
     if (params.obfuscate && WriteObfuscateKeyIfNotExists()){
         LogInfo("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscate_key));
@@ -458,7 +462,7 @@ std::optional<std::string> MDBXWrapper::ReadImpl(Span<const std::byte> key) cons
 {
     mdbx::slice slKey(CharCast(key.data()), key.size()), slValue;
 
-    DBContext().read_txn.renew_reading();
+    DBContext().read_txn = DBContext().env.start_read();
     slValue = DBContext().read_txn.get(DBContext().map, slKey, mdbx::slice::invalid());
 
     std::optional<std::string> ret;
@@ -469,22 +473,22 @@ std::optional<std::string> MDBXWrapper::ReadImpl(Span<const std::byte> key) cons
     else {
         ret = std::string(slValue.as_string());
     }
-    DBContext().read_txn.reset_reading();
+    DBContext().read_txn.abort();
     return ret;
 }
 
 bool MDBXWrapper::ExistsImpl(Span<const std::byte> key) const {
     mdbx::slice slKey(CharCast(key.data()), key.size()), slValue;
 
-    DBContext().read_txn.renew_reading();
+    DBContext().read_txn = DBContext().env.start_read();
     slValue = DBContext().read_txn.get(DBContext().map, slKey, mdbx::slice::invalid());
 
     if(slValue == mdbx::slice::invalid()) {
-        DBContext().read_txn.reset_reading();
+        DBContext().read_txn.abort();
         return false;
     }
     else {
-        DBContext().read_txn.reset_reading();
+        DBContext().read_txn.abort();
         return true;
     }
 
@@ -507,7 +511,7 @@ bool MDBXWrapper::WriteBatch(CDBBatchBase& _batch, bool fSync)
     batch.CommitAndReset();
 
     if(fSync) {
-   //     Sync();
+        Sync();
     }
 
     return true;
@@ -617,12 +621,12 @@ CDBIteratorBase* MDBXWrapper::NewIterator()
 
 bool MDBXWrapper::IsEmpty()
 {
-    DBContext().read_txn.renew_reading();
+    DBContext().read_txn = DBContext().env.start_read();
     auto cursor{DBContext().read_txn.open_cursor(DBContext().map)};
 
     // the done parameter indicates whether or not the cursor move succeeded.
     auto ret = !cursor.to_first(/*throw_notfound=*/false).done;
-    DBContext().read_txn.reset_reading();
+    DBContext().read_txn.abort();
     return ret;
 }
 

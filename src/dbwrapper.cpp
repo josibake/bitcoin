@@ -404,15 +404,12 @@ struct MDBXContext {
 
     // MDBX environment handle
     mdbx::env_managed env;
+
     // MDBX txn and map
     mdbx::txn_managed txn;
     mdbx::map_handle map;
 
     ~MDBXContext() = default;
-    //{
-        //txn.abort();
-        //env.close();
-    //}
 };
 
 
@@ -432,12 +429,6 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     DBContext().operate_params.options.no_sticky_threads = true;
     // initialize the mdbx environment.
     DBContext().env = mdbx::env_managed(params.path, DBContext().create_params, DBContext().operate_params);
-
-    // create a blank write and commit to ensure we can open the map below, is
-    // this necessary?
-    auto tempwrite = DBContext().env.start_write();
-    tempwrite.create_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
-    tempwrite.commit();
 
     DBContext().txn = DBContext().env.start_write();
     DBContext().map = DBContext().txn.open_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
@@ -493,13 +484,12 @@ size_t MDBXWrapper::EstimateSizeImpl(Span<const std::byte> key1, Span<const std:
 
 bool MDBXWrapper::WriteBatch(CDBBatchBase& _batch, bool fSync)
 {
-    // DBContext().txn.reset_reading();
     auto& batch = static_cast<MDBXBatch&>(_batch);
     auto &parent = static_cast<const MDBXWrapper&>(batch.m_parent);
     parent.DBContext().txn.commit();
 
     if(fSync) {
-        Sync();
+   //     Sync();
     }
 
     batch.ResetAfterCommit();
@@ -519,8 +509,7 @@ MDBXBatch::MDBXBatch(const CDBWrapperBase& _parent): CDBBatchBase(_parent) {}
 
 void MDBXBatch::ResetAfterCommit()
 {
-    // Destruct MDBXWriteBatchImpl and construct new one
-    // m_impl_batch.reset(new MDBXWriteBatchImpl);
+    LogDebug(BCLog::COINDB, "Reset after commit called!");
 
     auto &parent = static_cast<const MDBXWrapper&>(m_parent);
     parent.DBContext().txn = parent.DBContext().env.start_write();
@@ -528,8 +517,10 @@ void MDBXBatch::ResetAfterCommit()
 
 void MDBXBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
 {
+    size_t before_write_size = SizeEstimate();
+
     auto &parent = static_cast<const MDBXWrapper&>(m_parent);
-    size_t leafcountb4 = parent.DBContext().env.get_stat().ms_leaf_pages; //x
+
     mdbx::slice slKey(CharCast(key.data()), key.size());
     value.Xor(m_parent.GetObfuscateKey());
     mdbx::slice slValue(CharCast(value.data()), value.size());
@@ -543,22 +534,22 @@ void MDBXBatch::WriteImpl(Span<const std::byte> key, DataStream& value)
         throw dbwrapper_error(errmsg);
     }
 
-    size_t leafcountafter = parent.DBContext().env.get_stat().ms_leaf_pages; //x
-    LogDebug(BCLog::COINDB, "Leafs before: %d, Leafs After: %d\n\n\n\n", leafcountb4, leafcountafter);
+    int64_t change_size = SizeEstimate() - before_write_size;
+
+    LogDebug(BCLog::COINDB, "(write) changed txn size by %d bytes\n", change_size);
 }
 
 void MDBXBatch::EraseImpl(Span<const std::byte> key)
 {
     auto &parent = static_cast<const MDBXWrapper&>(m_parent);
+
     size_t before_erase_size = SizeEstimate();
     mdbx::slice slKey(CharCast(key.data()), key.size());
     parent.DBContext().txn.erase(parent.DBContext().map, slKey);
-    int64_t erase_change_size = SizeEstimate() - before_erase_size;
 
-    size_t leveldb_size_estimate = 2 + (slKey.size() > 127) + slKey.size();
+    int64_t change_size = SizeEstimate() - before_erase_size;
 
-    LogDebug(BCLog::COINDB, "Erase changed batch size by %d bytes\n", erase_change_size);
-    LogDebug(BCLog::COINDB, "LevelDB erase wouldaaa been %d bytes\n", leveldb_size_estimate);
+    LogDebug(BCLog::COINDB, "(erase) changed txn size by %d bytes\n", change_size);
 }
 
 size_t MDBXBatch::SizeEstimate() const

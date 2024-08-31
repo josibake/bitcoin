@@ -357,6 +357,9 @@ class MDBXBatch : public CDBBatchBase
     friend class MDBXWrapper;
 
 private:
+    struct MDBXWriteBatchImpl;
+    std::unique_ptr<MDBXWriteBatchImpl> m_impl_batch;
+
     void WriteImpl(Span<const std::byte> key, DataStream& value) override;
     void EraseImpl(Span<const std::byte> key) override;
 
@@ -365,9 +368,9 @@ public:
      * @param[in] _parent   CDBWrapper that this batch is to be submitted to
      */
     explicit MDBXBatch(const CDBWrapperBase& _parent);
-    ~MDBXBatch() = default;
+    ~MDBXBatch();
     // void Clear() override;
-    void ResetAfterCommit();
+    void CommitAndReset();
 
     size_t SizeEstimate() const override;
 };
@@ -378,7 +381,7 @@ class MDBXIterator : public CDBIteratorBase
 public:
     struct IteratorImpl;
 private:
-    const std::unique_ptr<IteratorImpl> m_impl_iter;
+    std::unique_ptr<IteratorImpl> m_impl_iter;
     bool valid;
 
     void SeekImpl(Span<const std::byte> key) override;
@@ -388,9 +391,10 @@ private:
 public:
     /**
      * @param[in] _parent          Parent CDBWrapper instance.
-     * @param[in] _piter           MDBX iterator.
+     * @param[in] db_context       MDBXWrapper DBContext.
      */
-    MDBXIterator(const CDBWrapperBase& _parent, std::unique_ptr<IteratorImpl> _piter);
+    MDBXIterator(const CDBWrapperBase& _parent, const MDBXContext &db_context);
+
     ~MDBXIterator() override;
 
     bool Valid() const override;
@@ -400,6 +404,7 @@ public:
 
 class MDBXWrapper : public CDBWrapperBase
 {
+    friend class MDBXIterator;
     friend class MDBXBatch; // We want MDBXBatch to be able to access the env and sync
                             // Is there a better mechanism than friend class?
 private:

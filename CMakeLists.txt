@@ -150,7 +150,7 @@ if(WITH_USDT)
   find_package(USDT MODULE REQUIRED)
 endif()
 
-option(WITH_MDBX "Enable libmdbx for the coindsb." OFF)
+option(WITH_MDBX "Enable libmdbx for the coindsb." ON)
 if(WITH_MDBX)
   find_package(MDBX MODULE REQUIRED)
 endif()

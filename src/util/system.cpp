@@ -359,6 +359,7 @@ const std::list<SectionInfo> ArgsManager::GetUnrecognizedSections() const
     static const std::set<std::string> available_sections{
         CBaseChainParams::REGTEST,
         CBaseChainParams::TESTNET,
+        CBaseChainParams::SIGNET,
         CBaseChainParams::MAIN
     };
 
@@ -966,6 +967,7 @@ std::string ArgsManager::GetChainName() const
     LOCK(cs_args);
     const bool fRegTest = ArgsManagerHelper::GetNetBoolArg(*this, "-regtest");
     const bool fTestNet = ArgsManagerHelper::GetNetBoolArg(*this, "-testnet");
+    const bool fSignet = ArgsManagerHelper::GetNetBoolArg(*this, "-signet");
     const bool is_chain_arg_set = IsArgSet("-chain");
 
     if ((int)is_chain_arg_set + (int)fRegTest + (int)fTestNet > 1) {
@@ -975,6 +977,8 @@ std::string ArgsManager::GetChainName() const
         return CBaseChainParams::REGTEST;
     if (fTestNet)
         return CBaseChainParams::TESTNET;
+    if (fSignet)
+        return CBaseChainParams::SIGNET;
     return GetArg("-chain", CBaseChainParams::MAIN);
 }
 

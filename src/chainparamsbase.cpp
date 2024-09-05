@@ -12,6 +12,7 @@
 
 const std::string CBaseChainParams::MAIN = "main";
 const std::string CBaseChainParams::TESTNET = "test";
+const std::string CBaseChainParams::SIGNET = "signet";
 const std::string CBaseChainParams::REGTEST = "regtest";
 
 void AppendParamsHelpMessages(std::string& strUsage, bool debugHelp)
@@ -49,6 +50,19 @@ public:
     }
 };
 
+/**
+ * Signet
+ */
+class CBaseSignetParams : public CBaseChainParams
+{
+public:
+    CBaseSignetParams()
+    {
+        nRPCPort = 38332;
+        strDataDir = "signet";
+    }
+};
+
 /*
  * Regression test
  */
@@ -78,6 +92,8 @@ std::unique_ptr<CBaseChainParams> CreateBaseChainParams(const std::string& chain
         return std::unique_ptr<CBaseChainParams>(new CBaseTestNetParams());
     else if (chain == CBaseChainParams::REGTEST)
         return std::unique_ptr<CBaseChainParams>(new CBaseRegTestParams());
+    else if (chain == CBaseChainParams::SIGNET)
+        return std::unique_ptr<CBaseChainParams>(new CBaseSignetParams());
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }
@@ -91,6 +107,7 @@ std::string ChainNameFromCommandLine()
 {
     bool fRegTest = gArgs.GetBoolArg("-regtest", false);
     bool fTestNet = gArgs.GetBoolArg("-testnet", false);
+    bool fSignet = gArgs.GetBoolArg("-signet", false);
 
     if (fTestNet && fRegTest)
         throw std::runtime_error("Invalid combination of -regtest and -testnet.");
@@ -98,5 +115,7 @@ std::string ChainNameFromCommandLine()
         return CBaseChainParams::REGTEST;
     if (fTestNet)
         return CBaseChainParams::TESTNET;
+    if (fSignet)
+        return CBaseChainParams::SIGNET;
     return CBaseChainParams::MAIN;
 }

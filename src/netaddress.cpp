@@ -361,6 +361,8 @@ std::vector<unsigned char> CNetAddr::GetGroup() const
         vchRet.push_back(NET_IPV4);
         vchRet.push_back(GetByte(3) ^ 0xFF);
         vchRet.push_back(GetByte(2) ^ 0xFF);
+        vchRet.push_back(GetByte(1) ^ 0xFF);
+        vchRet.push_back(GetByte(0) ^ 0xFF);
         return vchRet;
     }
     else if (IsTor())

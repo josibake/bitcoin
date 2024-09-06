@@ -517,6 +517,8 @@ std::vector<unsigned char> CNetAddr::GetGroup(const std::vector<bool> &asmap) co
         uint32_t ipv4 = GetLinkedIPv4();
         vchRet.push_back((ipv4 >> 24) & 0xFF);
         vchRet.push_back((ipv4 >> 16) & 0xFF);
+        vchRet.push_back((ipv4 >> 8) & 0xFF);
+        vchRet.push_back(ipv4 & 0xFF);
         return vchRet;
     } else if (IsTor()) {
         nStartByte = 6;

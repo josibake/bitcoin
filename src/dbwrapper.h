@@ -393,7 +393,7 @@ public:
      * @param[in] _parent          Parent CDBWrapper instance.
      * @param[in] db_context       MDBXWrapper DBContext.
      */
-    MDBXIterator(const CDBWrapperBase& _parent, const MDBXContext &db_context);
+    MDBXIterator(const CDBWrapperBase& _parent, MDBXContext &db_context);
 
     ~MDBXIterator() override;
 

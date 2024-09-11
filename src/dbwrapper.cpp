@@ -402,6 +402,8 @@ struct MDBXContext {
     mdbx::env::operate_parameters operate_params;
     mdbx::env_managed::create_parameters create_params;
 
+    mdbx::env::geometry geometry;
+
     // MDBX environment handle
     mdbx::env_managed env;
 
@@ -430,6 +432,8 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     TryCreateDirectories(params.path);
 
     LogPrintf("Opening MDBX in %s\n", fs::PathToString(params.path));
+
+    DBContext().create_params.geometry.pagesize = 16384;
 
     // We need this because of some unpleasant (for us) passing around of the
     // Chainstate between threads during initialization.
@@ -586,32 +590,38 @@ size_t MDBXBatch::SizeEstimate() const
 }
 
 struct MDBXIterator::IteratorImpl {
-    const std::unique_ptr<mdbx::txn_managed> read_txn;
+    MDBXContext &db_context;
     const std::unique_ptr<mdbx::cursor_managed> cursor;
 
-    IteratorImpl(mdbx::txn_managed&& txn, mdbx::cursor_managed&& cur)
-        : read_txn(std::make_unique<mdbx::txn_managed>(std::move(txn)))
+    IteratorImpl(MDBXContext& db_context, mdbx::cursor_managed&& cur)
+        : db_context(db_context)
         , cursor(std::make_unique<mdbx::cursor_managed>(std::move(cur)))
     {}
 };
 
-MDBXIterator::MDBXIterator(const CDBWrapperBase& _parent, const MDBXContext &db_context) : CDBIteratorBase(_parent)
+MDBXIterator::MDBXIterator(const CDBWrapperBase& _parent, MDBXContext &db_context) : CDBIteratorBase(_parent)
 {
-    auto read_txn = db_context.env.start_read();
-    auto cursor = read_txn.open_cursor(db_context.map);
+    db_context.read_txn.unpark_reading();
+    mdbx::cursor_managed cursor = db_context.read_txn.open_cursor(db_context.map);
 
-    m_impl_iter = std::unique_ptr<IteratorImpl>(new IteratorImpl(std::move(read_txn), std::move(cursor)));
+    m_impl_iter = std::unique_ptr<IteratorImpl>(new IteratorImpl(db_context, std::move(cursor)));
+    db_context.read_txn.park_reading(true);
 }
 
 MDBXIterator::~MDBXIterator()
 {
-    m_impl_iter->read_txn->abort();
+    m_impl_iter->cursor->close();
 }
 
 void MDBXIterator::SeekImpl(Span<const std::byte> key)
 {
+    m_impl_iter->db_context.read_txn.unpark_reading();
+
     mdbx::slice slKey(CharCast(key.data()), key.size());
     valid = m_impl_iter->cursor->seek(slKey);
+
+    // The below is probably dangerous since the slice could become invalidated.
+    m_impl_iter->db_context.read_txn.park_reading(true);
 }
 
 CDBIteratorBase* MDBXWrapper::NewIterator()
@@ -667,16 +677,24 @@ void CDBIterator::Next() { m_impl_iter->iter->Next(); }
 
 Span<const std::byte> MDBXIterator::GetKeyImpl() const
 {
+    m_impl_iter->db_context.read_txn.unpark_reading();
     // 'AsBytes(Span(...' is necessary since mdbx::slice::bytes() returns std::span<char8_t>
     // Rather than Span<std::byte>
-    return AsBytes(Span(m_impl_iter->cursor->current().key.bytes()));
+    auto ret = AsBytes(Span(m_impl_iter->cursor->current().key.bytes()));
+
+    m_impl_iter->db_context.read_txn.park_reading(true);
+    return ret;
 }
 
 Span<const std::byte> MDBXIterator::GetValueImpl() const
 {
+    m_impl_iter->db_context.read_txn.unpark_reading();
     // 'AsBytes(Span(...' is necessary since mdbx::slice::bytes() returns std::span<char8_t>
     // Rather than Span<std::byte>
-    return AsBytes(Span(m_impl_iter->cursor->current().value.bytes()));
+    auto ret = AsBytes(Span(m_impl_iter->cursor->current().value.bytes()));
+
+    m_impl_iter->db_context.read_txn.park_reading(true);
+    return ret;
 }
 
 bool MDBXIterator::Valid() const {
@@ -685,12 +703,16 @@ bool MDBXIterator::Valid() const {
 
 void MDBXIterator::SeekToFirst()
 {
+    m_impl_iter->db_context.read_txn.unpark_reading();
     valid = m_impl_iter->cursor->to_first(/*throw_notfound=*/false).done;
+    m_impl_iter->db_context.read_txn.park_reading(true);
 }
 
 void MDBXIterator::Next()
 {
+    m_impl_iter->db_context.read_txn.unpark_reading();
     valid = m_impl_iter->cursor->to_next(/*throw_notfound=*/false).done;
+    m_impl_iter->db_context.read_txn.park_reading(true);
 }
 
 const std::vector<unsigned char>& CDBWrapperBase::GetObfuscateKey() const

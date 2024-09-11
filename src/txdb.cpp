@@ -125,8 +125,16 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashB
         }
         count++;
         it = cursor.NextAndMaybeErase(*it);
-        LogDebug(BCLog::COINDB, "Writing partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
-        m_db->WriteBatch(batch);
+
+        // I am choosing an arbitrary transaction count to commit on
+        // since we can't really judge a transaction based on it's size
+        // since any size we choose that is a multiple of the page size
+        // we will end up committing before we hit the maximum number of
+        // writes at that page size.
+        if (batch.SizeEstimate() > m_options.batch_write_bytes) {
+            LogDebug(BCLog::COINDB, "Writing partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+            m_db->WriteBatch(batch);
+        }
     }
 
     // In the last batch, mark the database as consistent with hashBlock again.

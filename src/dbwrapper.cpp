@@ -443,7 +443,7 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     DBContext().map = DBContext().read_txn.open_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
 
     // Open readers induce really ugly append-only LMDB behavior
-    DBContext().read_txn.abort();
+    DBContext().read_txn.park_reading(true);
 
     if (params.obfuscate && WriteObfuscateKeyIfNotExists()){
         LogInfo("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscate_key));
@@ -462,7 +462,7 @@ std::optional<std::string> MDBXWrapper::ReadImpl(Span<const std::byte> key) cons
 {
     mdbx::slice slKey(CharCast(key.data()), key.size()), slValue;
 
-    DBContext().read_txn = DBContext().env.start_read();
+    DBContext().read_txn.unpark_reading();
     slValue = DBContext().read_txn.get(DBContext().map, slKey, mdbx::slice::invalid());
 
     std::optional<std::string> ret;
@@ -473,22 +473,22 @@ std::optional<std::string> MDBXWrapper::ReadImpl(Span<const std::byte> key) cons
     else {
         ret = std::string(slValue.as_string());
     }
-    DBContext().read_txn.abort();
+    DBContext().read_txn.park_reading(true);
     return ret;
 }
 
 bool MDBXWrapper::ExistsImpl(Span<const std::byte> key) const {
     mdbx::slice slKey(CharCast(key.data()), key.size()), slValue;
 
-    DBContext().read_txn = DBContext().env.start_read();
+    DBContext().read_txn.unpark_reading();
     slValue = DBContext().read_txn.get(DBContext().map, slKey, mdbx::slice::invalid());
 
     if(slValue == mdbx::slice::invalid()) {
-        DBContext().read_txn.abort();
+        DBContext().read_txn.park_reading(true);
         return false;
     }
     else {
-        DBContext().read_txn.abort();
+        DBContext().read_txn.park_reading(true);
         return true;
     }
 
@@ -621,12 +621,12 @@ CDBIteratorBase* MDBXWrapper::NewIterator()
 
 bool MDBXWrapper::IsEmpty()
 {
-    DBContext().read_txn = DBContext().env.start_read();
+    DBContext().read_txn.unpark_reading();;
     auto cursor{DBContext().read_txn.open_cursor(DBContext().map)};
 
     // the done parameter indicates whether or not the cursor move succeeded.
     auto ret = !cursor.to_first(/*throw_notfound=*/false).done;
-    DBContext().read_txn.abort();
+    DBContext().read_txn.park_reading(true);
     return ret;
 }
 

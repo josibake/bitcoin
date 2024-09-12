@@ -34,17 +34,6 @@ same_dir() {
     [ "$resolved1" = "$resolved2" ]
 }
 
-if ! same_dir "${PWD}" "$(git_root)"; then
-cat << EOF
-ERR: This script must be invoked from the top level of the git repository
-
-Hint: This may look something like:
-    env FOO=BAR ./contrib/guix/guix-<blah>
-
-EOF
-exit 1
-fi
-
 ################
 # Execute "$@" in a pinned, possibly older version of Guix, for reproducibility
 # across time.

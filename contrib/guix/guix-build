@@ -263,7 +263,6 @@ mkdir -p "$VAR_BASE"
     # Get depends precious dir definitions from depends
     make -C "${PWD}/depends" \
          --no-print-directory \
-         -- $(printf "print-%s\n" $depends_precious_dir_names)
 
     # Get remaining precious dir definitions from the environment
     for precious_dir_name in $precious_dir_names; do

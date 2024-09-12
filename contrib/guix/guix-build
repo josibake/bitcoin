@@ -261,7 +261,7 @@ mkdir -p "$VAR_BASE"
 # shellcheck disable=SC2046,SC2086
 {
     # Get depends precious dir definitions from depends
-    make -C "${PWD}/depends" \
+    V=1 make -C "${PWD}/depends" \
          --no-print-directory \
 
     # Get remaining precious dir definitions from the environment

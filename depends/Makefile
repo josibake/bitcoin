@@ -1,5 +1,9 @@
 .NOTPARALLEL :
 
+print-%: FORCE
+	@echo '$*'='$($*)'
+
+MAKEOVERRIDES := $(filter V=%,$(MAKEOVERRIDES))
 SOURCES_PATH ?= $(BASEDIR)/sources
 BASE_CACHE ?= $(BASEDIR)/built
 SDK_PATH ?= $(BASEDIR)/SDKs
@@ -155,6 +159,12 @@ define check_or_remove_sources
     ( echo "Checksum missing or mismatched for $(package) source. Forcing re-download."; \
       rm -f $($(package)_all_sources) $($(1)_fetched))) || true
 endef
+
+clean-all: clean
+	@rm -rf $(SOURCES_PATH) x86_64* i686* mips* arm* aarch64* powerpc* riscv32* riscv64* s390x*
+
+clean:
+	@rm -rf $(WORK_PATH) $(BASE_CACHE) $(BUILD) *.log
 
 check-packages:
 	@$(foreach package,$(all_packages),$(call check_or_remove_cached,$(package));)

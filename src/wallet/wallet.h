@@ -785,8 +785,8 @@ public:
     CAmount GetDebit(const CTxIn& txin, const isminefilter& filter) const;
     isminetype IsMine(const CTxOut& txout) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool IsMine(const CTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    bool IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& spent_coins) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     isminetype IsMine(const COutPoint& outpoint) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool IsMineSilentPayment(const CTransaction& tx, const std::map<COutPoint, Coin>&  spent_coins, std::map<XOnlyPubKey, std::optional<CPubKey>>& found_outputs) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /** should probably be renamed to IsRelevantToMe */
     bool IsFromMe(const CTransaction& tx) const;
     CAmount GetDebit(const CTransaction& tx, const isminefilter& filter) const;

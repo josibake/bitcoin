@@ -743,10 +743,9 @@ public:
     bool CanGetAddresses(bool internal) const override { return true; }
 
     isminetype IsMine(const CScript& script) const override;
-    isminetype IsMine(std::vector<XOnlyPubKey> output_keys, bip352::PublicData& public_data);
+    isminetype IsMine(std::vector<XOnlyPubKey> output_keys, bip352::PublicData& public_data, std::map<XOnlyPubKey, std::optional<CPubKey>> &found_outputs);
 
     bool TopUp(unsigned int size = 0) override;
-
     // Adds a tweak to m_map_spk_tweaks and writes to DB
     bool TopUp(const uint256& tweak);
 
@@ -757,6 +756,8 @@ public:
     void AddTweak(const uint256& tweak);
 
     std::vector<WalletDestination> MarkUnusedAddresses(const CScript& script) override;
+
+    std::optional<CTxDestination> GetLabelledSPDestination(const XOnlyPubKey xonlypubkey, const CPubKey label);
 };
 
 /** struct containing information needed for migrating legacy wallets to descriptor wallets */

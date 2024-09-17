@@ -1252,12 +1252,17 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const std::ma
 
         bool fExisted = mapWallet.count(tx.GetHash()) != 0;
         if (fExisted && !fUpdate) return false;
-        if (fExisted || IsMine(tx, spent_coins) || IsFromMe(tx))
+
+        std::map<XOnlyPubKey, std::optional<CPubKey>> silent_payment_outputs;
+        bool isMineSilentPayment = !tx.IsCoinBase() && IsMineSilentPayment(tx, spent_coins, silent_payment_outputs);
+        if (fExisted || IsMine(tx) || isMineSilentPayment || IsFromMe(tx))
         {
             /* Check if any keys in the wallet keypool that were supposed to be unused
              * have appeared in a new transaction. If so, remove those keys from the keypool.
              * This can happen when restoring an old wallet backup that does not contain
              * the mostly recently created transactions from newer versions of the wallet.
+             * 
+             * Also find any labelled silent payment taproot scriptPubKeys and add them to the AddressBook
              */
 
             // loop though all outputs
@@ -1278,6 +1283,25 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const std::ma
                         if (!*dest.internal && !FindAddressBookEntry(dest.dest, /* allow_change= */ false)) {
                             SetAddressBook(dest.dest, "", AddressPurpose::RECEIVE);
                         }
+                    }
+
+                    SilentPaymentDescriptorScriptPubKeyMan* sp_spk_man = dynamic_cast<SilentPaymentDescriptorScriptPubKeyMan*>(spk_man);
+                    CTxDestination dest;
+                    ExtractDestination(txout.scriptPubKey, dest);
+                    const WitnessV1Taproot* xonlypubkey = std::get_if<WitnessV1Taproot>(&dest);
+                    if (sp_spk_man == nullptr || !isMineSilentPayment || xonlypubkey == nullptr) continue;
+
+                    auto it = silent_payment_outputs.find(*xonlypubkey);
+                    if (it == silent_payment_outputs.end() || !it->second.has_value()) continue;
+
+                    auto parent_dest = sp_spk_man->GetLabelledSPDestination(*xonlypubkey, it->second.value());
+                    if (!parent_dest.has_value()) continue;
+                    auto parent_addr_data = FindAddressBookEntry(parent_dest.value());
+                    if (parent_addr_data) {
+                        SetAddressBook(dest, parent_addr_data->GetLabel(), AddressPurpose::RECEIVE);
+                    } else {
+                        SetAddressBook(*parent_dest, "", AddressPurpose::RECEIVE);
+                        SetAddressBook(dest, "", AddressPurpose::RECEIVE);
                     }
                 }
             }
@@ -1682,24 +1706,18 @@ bool CWallet::IsMine(const CTransaction& tx) const
     return false;
 }
 
-bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& spent_coins)
-{
-    AssertLockHeld(cs_wallet);
-    if (IsMine(tx)) return true;
 
-    // Check for silent payments too
-    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
-        auto  sp_data = GetSilentPaymentsData(tx, spent_coins);
-        if (!sp_data.has_value()) {
-            return false;
-        }
-        for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
-            if (sp_spkm->IsMine(sp_data->first, sp_data->second)) {
-                return true;
-            }
+bool CWallet::IsMineSilentPayment(const CTransaction& tx, const std::map<COutPoint, Coin>&  spent_coins, std::map<XOnlyPubKey, std::optional<CPubKey>>& found_outputs) {
+    AssertLockHeld(cs_wallet);
+
+    auto sp_data = GetSilentPaymentsData(tx, spent_coins);
+    if (!sp_data.has_value()) return false;
+    for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
+        if (sp_spkm->IsMine(sp_data->first, sp_data->second, found_outputs)) {
+            return true;
         }
     }
-
+        
     return false;
 }
 

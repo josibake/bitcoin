@@ -2914,7 +2914,7 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(const CScript& script)
     return ISMINE_NO;
 }
 
-isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKey> output_keys, BIP352::PubTweakData& public_data)
+isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKey> output_keys, BIP352::PubTweakData& public_data, std::map<XOnlyPubKey, std::optional<CPubKey>> &found_outputs)
 {
     LOCK(cs_desc_man);
     if (m_wallet_descriptor.descriptor->GetOutputType() != OutputType::SILENT_PAYMENT) {
@@ -2933,6 +2933,7 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKe
         throw std::runtime_error(strprintf("Error during descriptors tweak top up. Cannot start db transaction wallet %s", m_storage.GetDisplayName()));
     }
     for (const auto& tweak : *tweaks) {
+        found_outputs.emplace(std::make_pair(tweak.output, tweak.label));
         if (!TopUpWithDB(batch, tweak.tweak)) {
             throw std::runtime_error(std::string(__func__) + ": writing tweak failed");
         }
@@ -3031,6 +3032,21 @@ std::vector<WalletDestination> SilentPaymentDescriptorScriptPubKeyMan::MarkUnuse
     // This concept does not apply Silent Payments as there is no cache of unused destinations/addresses
     // Still, we must subclass this because the original method tries to expand the descriptor which will result in an error for SP descriptors
     return {};
+}
+
+std::optional<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetLabelledSPDestination(const XOnlyPubKey xonlypubkey, const CPubKey label)
+{
+    LOCK(cs_desc_man);
+    
+    auto sppubkey = GetSpPubKeyFrom(m_wallet_descriptor.descriptor);
+    auto it = m_map_label_tweaks.find(label);
+    if (it == m_map_label_tweaks.end()) return std::nullopt;
+    auto label_tweak = it->second;
+    CPubKey tweaked_pubkey(sppubkey->spendKey.begin(), sppubkey->spendKey.end());
+    tweaked_pubkey.TweakAdd(label_tweak.data());
+
+    V0SilentPaymentDestination sp_dest(sppubkey->scanKey.GetPubKey(), tweaked_pubkey);
+    return sp_dest;
 }
 
 } // namespace wallet

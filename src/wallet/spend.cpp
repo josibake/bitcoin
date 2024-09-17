@@ -1527,9 +1527,10 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
             spent_coins[utxo->outpoint] = Coin{utxo->txout, 0, tx->IsCoinBase()};
         }
         auto sp_data = GetSilentPaymentsData(*tx, spent_coins);
+        std::map<XOnlyPubKey, std::optional<CPubKey>> found_outputs;
         if (sp_data.has_value()) {
             for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : wallet.GetSilentPaymentsSPKMs()) {
-                sp_spkm->IsMine(sp_data->first, sp_data->second);
+                sp_spkm->IsMine(sp_data->first, sp_data->second, found_outputs);
             }
         }
     }

@@ -153,6 +153,13 @@ else()
   set(WITH_USDT ON CACHE BOOL "")
 endif()
 
+set(libmdbx_packages @libmdbx_packages@)
+if("${libmdbx_packages}" STREQUAL "")
+  set(WITH_MDBX OFF CACHE BOOL "")
+else()
+  set(WITH_MDBX ON CACHE BOOL "")
+endif()
+
 if("@no_harden@")
   set(ENABLE_HARDENING OFF CACHE BOOL "")
 else()

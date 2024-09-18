@@ -20,6 +20,31 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.skip_if_no_wallet()
         self.skip_if_no_sqlite()
 
+    def test_labels(self):
+        self.log.info("Check Silent Payment Labels")
+
+        self.nodes[0].createwallet(wallet_name="labels", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("labels")
+
+        labeled_sp_addr = wallet.getnewaddress(address_type="silent-payments", label="test")
+        addr_info = wallet.getaddressinfo(labeled_sp_addr)
+        assert_equal(addr_info["labels"][0], "test")
+        assert_equal(wallet.listlabels(), ["test"])
+        assert_raises_rpc_error(-11, "No addresses with label test", wallet.getaddressesbylabel, "test") # SP destination is ignored
+
+        self.def_wallet.sendtoaddress(labeled_sp_addr, 10)
+        self.generate(self.nodes[0], 1)
+
+        addresses = wallet.getaddressesbylabel("test")
+        sp_taproot_spk_addr = list(addresses)[0]
+        assert_equal(len(addresses), 1)
+        assert_equal(addresses[sp_taproot_spk_addr]["purpose"], "receive")
+        assert_equal(wallet.getaddressinfo(sp_taproot_spk_addr)["labels"][0], "test")
+        wallet_txs_by_label = wallet.listreceivedbylabel()
+        assert_equal(wallet_txs_by_label[0]["amount"], 10)
+        assert_equal(wallet_txs_by_label[0]["label"], "test")
+        assert_equal(wallet.getreceivedbylabel("test"), 10)
+
     def test_encrypt_and_decrypt(self):
         self.log.info("Check that a silent payments wallet can be encrypted and decrypted")
         self.log.info("Create encrypted wallet")
@@ -171,6 +196,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_encrypting_unencrypted()
         self.test_basic()
         self.test_import_rescan()
+        self.test_labels()
 
 
 if __name__ == '__main__':

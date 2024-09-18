@@ -721,23 +721,20 @@ RPCHelpMan getaddressesbylabel()
     UniValue ret(UniValue::VOBJ);
     std::set<std::string> addresses;
     pwallet->ForEachAddrBookEntry([&](const CTxDestination& _dest, const std::string& _label, bool _is_change, const std::optional<AddressPurpose>& _purpose) {
-        if (_is_change) return;
-        if (_label == label) {
-            std::string address = EncodeDestination(_dest);
-            // CWallet::m_address_book is not expected to contain duplicate
-            // address strings, but build a separate set as a precaution just in
-            // case it does.
-            bool unique = addresses.emplace(address).second;
-            CHECK_NONFATAL(unique);
-            // UniValue::pushKV checks if the key exists in O(N)
-            // and since duplicate addresses are unexpected (checked with
-            // std::set in O(log(N))), UniValue::pushKVEnd is used instead,
-            // which currently is O(1).
-            UniValue value(UniValue::VOBJ);
-            value.pushKV("purpose", _purpose ? PurposeToString(*_purpose) : "unknown");
-            ret.pushKVEnd(address, std::move(value));
-        }
-    });
+        std::string address = EncodeDestination(_dest);
+        // CWallet::m_address_book is not expected to contain duplicate
+        // address strings, but build a separate set as a precaution just in
+        // case it does.
+        bool unique = addresses.emplace(address).second;
+        CHECK_NONFATAL(unique);
+        // UniValue::pushKV checks if the key exists in O(N)
+        // and since duplicate addresses are unexpected (checked with
+        // std::set in O(log(N))), UniValue::pushKVEnd is used instead,
+        // which currently is O(1).
+        UniValue value(UniValue::VOBJ);
+        value.pushKV("purpose", _purpose ? PurposeToString(*_purpose) : "unknown");
+        ret.pushKVEnd(address, std::move(value));
+    }, CWallet::AddrBookFilter{.m_op_label = label, .m_ignore_output_types = std::vector{OutputType::SILENT_PAYMENT}, .ignore_change = true});
 
     if (ret.empty()) {
         throw JSONRPCError(RPC_WALLET_INVALID_LABEL_NAME, std::string("No addresses with label " + label));

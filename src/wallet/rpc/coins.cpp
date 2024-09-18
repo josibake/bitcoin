@@ -23,7 +23,7 @@ static CAmount GetReceived(const CWallet& wallet, const UniValue& params, bool b
     std::vector<CTxDestination> addresses;
     if (by_label) {
         // Get the set of addresses assigned to label
-        addresses = wallet.ListAddrBookAddresses(CWallet::AddrBookFilter{LabelFromValue(params[0])});
+        addresses = wallet.ListAddrBookAddresses(CWallet::AddrBookFilter{ .m_op_label = LabelFromValue(params[0]), .m_ignore_output_types = std::vector{OutputType::SILENT_PAYMENT} });
         if (addresses.empty()) throw JSONRPCError(RPC_WALLET_ERROR, "Label not found in wallet");
     } else {
         // Get the address

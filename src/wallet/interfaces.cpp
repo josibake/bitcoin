@@ -224,7 +224,7 @@ public:
             isminetype is_mine = m_wallet->IsMine(dest);
             // In very old wallets, address purpose may not be recorded so we derive it from IsMine
             result.emplace_back(dest, is_mine, purpose.value_or(is_mine ? AddressPurpose::RECEIVE : AddressPurpose::SEND), label);
-        });
+        }, std::nullopt);
         return result;
     }
     std::vector<std::string> getAddressReceiveRequests() override {

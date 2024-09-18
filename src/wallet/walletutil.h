@@ -5,11 +5,13 @@
 #ifndef BITCOIN_WALLET_WALLETUTIL_H
 #define BITCOIN_WALLET_WALLETUTIL_H
 
+#include <addresstype.h>
 #include <common/bip352.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <script/descriptor.h>
 #include <silentpaymentkey.h>
+#include <outputtype.h>
 #include <util/fs.h>
 
 #include <optional>
@@ -132,6 +134,45 @@ WalletDescriptor GenerateWalletDescriptor(const CExtKey& master_key, const Outpu
 std::optional<std::pair<std::vector<XOnlyPubKey>, bip352::PublicData>> GetSilentPaymentsData(const CTransaction& tx, const std::map<COutPoint, Coin>& spent_coins);
 
 std::optional<SpPubKey> GetSpPubKeyFrom(std::shared_ptr<Descriptor> desc);
+
+struct DestinationToOutputTypeVisitor {
+    std::optional<OutputType> operator()(const PubKeyDestination& dest) const {
+        return OutputType::LEGACY;
+    }
+
+    std::optional<OutputType> operator()(const PKHash& dest) const {
+        return OutputType::LEGACY;
+    }
+
+    std::optional<OutputType> operator()(const ScriptHash& dest) const {
+        return OutputType::P2SH_SEGWIT;
+    }
+
+    std::optional<OutputType> operator()(const WitnessV0KeyHash& dest) const {
+        return OutputType::BECH32;
+    }
+
+    std::optional<OutputType> operator()(const WitnessV0ScriptHash& dest) const {
+        return OutputType::BECH32;
+    }
+
+    std::optional<OutputType> operator()(const WitnessV1Taproot& dest) const {
+        return OutputType::BECH32M;
+    }
+
+    std::optional<OutputType> operator()(const V0SilentPaymentDestination& dest) const {
+        return OutputType::SILENT_PAYMENT;
+    }
+
+    std::optional<OutputType> operator()(const WitnessUnknown& dest) const {
+        return OutputType::UNKNOWN;
+    }
+
+    std::optional<OutputType> operator()(const CNoDestination& dest) const {
+        return std::nullopt;
+    }
+};
+
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_WALLETUTIL_H

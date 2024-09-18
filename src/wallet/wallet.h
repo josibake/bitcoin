@@ -746,6 +746,8 @@ public:
     struct AddrBookFilter {
         // Fetch addresses with the provided label
         std::optional<std::string> m_op_label{std::nullopt};
+        // Ignore these OutputTypes
+        std::optional<std::vector<OutputType>> m_ignore_output_types{std::nullopt};
         // Don't include change addresses by default
         bool ignore_change{true};
     };
@@ -765,7 +767,7 @@ public:
      * Stops when the provided 'ListAddrBookFunc' returns false.
      */
     using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose> purpose)>;
-    void ForEachAddrBookEntry(const ListAddrBookFunc& func) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void ForEachAddrBookEntry(const ListAddrBookFunc& func, const std::optional<AddrBookFilter>& filter) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Marks all outputs in each one of the destinations dirty, so their cache is

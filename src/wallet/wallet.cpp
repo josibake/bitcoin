@@ -2726,28 +2726,42 @@ void CWallet::MarkDestinationsDirty(const std::set<CTxDestination>& destinations
     }
 }
 
-void CWallet::ForEachAddrBookEntry(const ListAddrBookFunc& func) const
+void CWallet::ForEachAddrBookEntry(const ListAddrBookFunc& func, const std::optional<AddrBookFilter>& _filter) const
 {
     AssertLockHeld(cs_wallet);
+    AddrBookFilter filter = _filter ? *_filter : AddrBookFilter();
     for (const std::pair<const CTxDestination, CAddressBookData>& item : m_address_book) {
         const auto& entry = item.second;
+        // Filter by change
+        if (filter.ignore_change && entry.IsChange()) continue;
+        // Filter by label
+        if (filter.m_op_label && *filter.m_op_label != entry.GetLabel()) continue;
+        // Filter by output type
+        if (filter.m_ignore_output_types) {
+            auto output_type = std::visit(DestinationToOutputTypeVisitor{}, item.first);
+            if (!output_type) continue;
+            bool is_ignored = false;
+            for (auto ignored_type : *filter.m_ignore_output_types) {
+                if (*output_type == ignored_type) {
+                    is_ignored = true;
+                    continue;
+                }
+            }
+            if (is_ignored) continue;
+        }
+
+        // All good
         func(item.first, entry.GetLabel(), entry.IsChange(), entry.purpose);
     }
 }
 
-std::vector<CTxDestination> CWallet::ListAddrBookAddresses(const std::optional<AddrBookFilter>& _filter) const
+std::vector<CTxDestination> CWallet::ListAddrBookAddresses(const std::optional<AddrBookFilter>& filter) const
 {
     AssertLockHeld(cs_wallet);
     std::vector<CTxDestination> result;
-    AddrBookFilter filter = _filter ? *_filter : AddrBookFilter();
-    ForEachAddrBookEntry([&result, &filter](const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) {
-        // Filter by change
-        if (filter.ignore_change && is_change) return;
-        // Filter by label
-        if (filter.m_op_label && *filter.m_op_label != label) return;
-        // All good
+    ForEachAddrBookEntry([&result](const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) {
         result.emplace_back(dest);
-    });
+    }, filter);
     return result;
 }
 
@@ -2761,7 +2775,7 @@ std::set<std::string> CWallet::ListAddrBookLabels(const std::optional<AddressPur
         if (!purpose || purpose == _purpose) {
             label_set.insert(_label);
         }
-    });
+    }, std::nullopt);
     return label_set;
 }
 

@@ -183,7 +183,7 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
         if (entry) func(*filtered_address, entry->GetLabel(), entry->IsChange(), entry->purpose);
     } else {
         // No filtered addr, walk-through the addressbook entry
-        wallet.ForEachAddrBookEntry(func);
+        wallet.ForEachAddrBookEntry(func, CWallet::AddrBookFilter{ .m_ignore_output_types = std::vector{OutputType::SILENT_PAYMENT} });
     }
 
     if (by_label) {

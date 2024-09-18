@@ -89,6 +89,7 @@ bool BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFi
     for (const CBlockIndex* bi : blockinfo) {
         batch.Write(std::make_pair(DB_BLOCK_INDEX, bi->GetBlockHash()), CDiskBlockIndex{bi});
     }
+    batch.Write(std::make_pair(DB_BLOCK_INDEX, uint256()), CDiskBlockIndex());
     return m_db->WriteBatch(batch, true);
 }
 
@@ -112,6 +113,9 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
     AssertLockHeld(::cs_main);
     std::unique_ptr<CDBIteratorBase> pcursor(m_db->NewIterator());
     pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
+    // assert(pcursor->Valid());
+    // hack: skip the dummy value and start at the next one
+    if (pcursor->Valid()) pcursor->Next();
 
     // Load m_block_index
     while (pcursor->Valid()) {

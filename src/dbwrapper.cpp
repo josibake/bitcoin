@@ -438,7 +438,7 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
 
     // initialize the mdbx environment.
     DBContext().env = mdbx::env_managed(params.path, DBContext().create_params, DBContext().operate_params);
-    
+
     auto txn = DBContext().env.start_read();
     DBContext().map = txn.open_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
     txn.commit();

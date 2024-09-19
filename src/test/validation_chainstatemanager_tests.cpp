@@ -72,7 +72,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
     Chainstate& c2 = WITH_LOCK(::cs_main, return manager.ActivateExistingSnapshot(snapshot_blockhash));
     chainstates.push_back(&c2);
     c2.InitCoinsDB(
-        /*cache_size_bytes=*/1 << 23, /*in_memory=*/true, /*should_wipe=*/false);
+        /*cache_size_bytes=*/1 << 23, /*in_memory=*/true, /*should_wipe=*/false, /*read_only=*/false);
     {
         LOCK(::cs_main);
         c2.InitCoinsCache(1 << 23);
@@ -138,7 +138,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
     Chainstate& c2 = WITH_LOCK(cs_main, return manager.ActivateExistingSnapshot(*snapshot_base->phashBlock));
     chainstates.push_back(&c2);
     c2.InitCoinsDB(
-        /*cache_size_bytes=*/1 << 23, /*in_memory=*/true, /*should_wipe=*/false);
+        /*cache_size_bytes=*/1 << 23, /*in_memory=*/true, /*should_wipe=*/false, /*read_only=*/false);
 
     // Reset IBD state so IsInitialBlockDownload() returns true and causes
     // MaybeRebalancesCaches() to prioritize the snapshot chainstate, giving it

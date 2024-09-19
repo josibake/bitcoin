@@ -46,6 +46,7 @@ static ChainstateLoadResult CompleteChainstateInitialization(
         .cache_bytes = static_cast<size_t>(cache_sizes.block_tree_db),
         .memory_only = options.block_tree_db_in_memory,
         .wipe_data = options.wipe_block_tree_db,
+        .read_only = options.read_only,
         .options = chainman.m_options.block_tree_db});
 
     if (options.wipe_block_tree_db) {
@@ -110,7 +111,8 @@ static ChainstateLoadResult CompleteChainstateInitialization(
         chainstate->InitCoinsDB(
             /*cache_size_bytes=*/chainman.m_total_coinsdb_cache * init_cache_fraction,
             /*in_memory=*/options.coins_db_in_memory,
-            /*should_wipe=*/options.wipe_chainstate_db);
+            /*should_wipe=*/options.wipe_chainstate_db,
+            /*read_only=*/options.read_only);
 
         if (options.coins_error_cb) {
             chainstate->CoinsErrorCatcher().AddReadErrCallback(options.coins_error_cb);

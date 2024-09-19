@@ -42,6 +42,11 @@ struct DBParams {
     //! If true, store data obfuscated via simple XOR. If false, XOR with a
     //! zero'd byte array.
     bool obfuscate = false;
+    //! Open the database in read-only mode, e.g., from a process outside bitcoind
+    //! Note: leveldb does not support multi-process readers, so it might make
+    //! more sense to have this be a DBOptions flag, since it is implementation
+    //! specific?
+    bool read_only = false;
     //! Passed-through options.
     DBOptions options{};
 };

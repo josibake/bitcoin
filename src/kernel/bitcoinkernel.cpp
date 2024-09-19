@@ -1019,6 +1019,10 @@ void kernel_chainstate_load_options_set(
         chainstate_load_opts->coins_db_in_memory = value;
         return;
     }
+    case kernel_ChainstateLoadOptionType::kernel_READONLY: {
+        chainstate_load_opts->read_only = value;
+        return;
+    }
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -1384,7 +1388,7 @@ bool kernel_chainstate_manager_process_transaction(
 bool kernel_chainstate_manager_process_block(
     const kernel_Context* context_,
     kernel_ChainstateManager* chainman_,
-    kernel_Block* block_, 
+    kernel_Block* block_,
     kernel_ProcessBlockStatus* status)
 {
     auto& chainman{*cast_chainstate_manager(chainman_)};
@@ -1565,7 +1569,7 @@ kernel_BlockHeader* kernel_get_block_header(kernel_Block* block_)
 {
     auto block{cast_cblocksharedpointer(block_)};
     return reinterpret_cast<kernel_BlockHeader*>(new CBlockHeader{(*block)->GetBlockHeader()});
-} 
+}
 
 kernel_BlockHeader* kernel_block_header_create(const unsigned char* raw_block_header, size_t raw_block_header_len)
 {

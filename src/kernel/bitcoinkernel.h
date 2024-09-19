@@ -340,6 +340,7 @@ typedef enum {
     kernel_WIPE_CHAINSTATE_DB_CHAINSTATE_LOAD_OPTION,      //! Set the wipe chainstate option, default is false.
     kernel_BLOCK_TREE_DB_IN_MEMORY_CHAINSTATE_LOAD_OPTION, //! Set the block tree db in memory option, default is false.
     kernel_CHAINSTATE_DB_IN_MEMORY_CHAINSTATE_LOAD_OPTION, //! Set the coins db in memory option, default is false.
+    kernel_READONLY,                                       //! Open the block tree db and coins db in read-only mode, e.g., from a process outside bitcoind
 } kernel_ChainstateLoadOptionType;
 
 /**
@@ -1129,7 +1130,7 @@ kernel_BlockUndo* BITCOINKERNEL_WARN_UNUSED_RESULT kernel_read_block_undo_from_d
 
 /**
  * @brief Validates a passed in block header and on success adds it to the header chain.
- * 
+ *
  * @param[in] chainman Non-null.
  * @param[in] header   Non-null, the header to be validated.
  * @return             True if the header was successfully validated.

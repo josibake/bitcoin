@@ -1961,6 +1961,7 @@ void Chainstate::InitCoinsDB(
     size_t cache_size_bytes,
     bool in_memory,
     bool should_wipe,
+    bool read_only,
     fs::path leveldb_name)
 {
     if (m_from_snapshot_blockhash) {
@@ -1974,6 +1975,7 @@ void Chainstate::InitCoinsDB(
             .memory_only = in_memory,
             .wipe_data = should_wipe,
             .obfuscate = true,
+            .read_only = read_only,
             .options = m_chainman.m_options.coins_db},
         m_chainman.m_options.coins_view);
 }

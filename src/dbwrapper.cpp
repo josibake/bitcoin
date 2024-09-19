@@ -420,14 +420,14 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     : CDBWrapperBase(params),
     m_db_context{std::make_unique<MDBXContext>()}
 {
-    if (params.wipe_data) {
+    if (params.wipe_data && !params.read_only) {
         LogInfo("Wiping MDBX in %s\n", fs::PathToString(params.path));
         DestroyDB(fs::PathToString(params.path));
     }
 
     TryCreateDirectories(params.path);
 
-    LogPrintf("Opening MDBX in %s\n", fs::PathToString(params.path));
+    LogPrintf("Opening MDBX in %s (read-only: %s)\n", fs::PathToString(params.path), params.read_only ? "yes" : "no");
 
     DBContext().create_params.geometry.pagesize = 16384;
 
@@ -436,6 +436,11 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     DBContext().operate_params.options.no_sticky_threads = true;
     DBContext().operate_params.durability = mdbx::env::whole_fragile;
 
+    // Set read-only mode if specified
+    if (params.read_only) {
+        DBContext().operate_params.mode = mdbx::env::mode::readonly;
+    }
+
     // initialize the mdbx environment.
     DBContext().env = mdbx::env_managed(params.path, DBContext().create_params, DBContext().operate_params);
     
@@ -443,10 +448,12 @@ MDBXWrapper::MDBXWrapper(const DBParams& params)
     DBContext().map = txn.open_map(nullptr, mdbx::key_mode::usual, mdbx::value_mode::single);
     txn.commit();
 
-    if (params.obfuscate && WriteObfuscateKeyIfNotExists()){
-        LogInfo("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscate_key));
+    if (!params.read_only) {
+        if (params.obfuscate && WriteObfuscateKeyIfNotExists()){
+            LogInfo("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscate_key));
+        }
+        LogInfo("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(GetObfuscateKey()));
     }
-    LogInfo("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(GetObfuscateKey()));
 }
 
 MDBXWrapper::~MDBXWrapper() = default;

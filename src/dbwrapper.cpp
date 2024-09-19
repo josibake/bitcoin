@@ -608,7 +608,7 @@ MDBXIterator::~MDBXIterator()
 void MDBXIterator::SeekImpl(Span<const std::byte> key)
 {
     mdbx::slice slKey(CharCast(key.data()), key.size());
-    valid = m_impl_iter->cursor->seek(slKey);
+    valid = m_impl_iter->cursor->lower_bound(slKey);
 }
 
 CDBIteratorBase* MDBXWrapper::NewIterator()

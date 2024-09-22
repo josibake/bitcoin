@@ -3,6 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "dbwrapper.h"
 #include <config/bitcoin-config.h> // IWYU pragma: keep
 
 #include <init.h>
@@ -1069,6 +1070,8 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             .chainparams = chainman_opts_dummy.chainparams,
             .blocks_dir = args.GetBlocksDirPath(),
             .notifications = chainman_opts_dummy.notifications,
+            .block_tree_db_dir = args.GetDataDirNet() / "blocks" / "index",
+            .block_tree_db_cache_size = 0,
         };
         auto blockman_result{ApplyArgsManOptions(args, blockman_opts_dummy)};
         if (!blockman_result) {
@@ -1217,10 +1220,15 @@ static ChainstateLoadResult InitAndLoadChainstate(
         .chainparams = chainman_opts.chainparams,
         .blocks_dir = args.GetBlocksDirPath(),
         .notifications = chainman_opts.notifications,
+        .block_tree_db_dir = args.GetDataDirNet() / "blocks" / "index",
+        .wipe_block_tree_db = do_reindex,
+        .block_tree_db_cache_size = cache_sizes.block_tree_db,
     };
     Assert(ApplyArgsManOptions(args, blockman_opts)); // no error can happen, already checked in AppInitParameterInteraction
     try {
         node.chainman = std::make_unique<ChainstateManager>(*Assert(node.shutdown), chainman_opts, blockman_opts);
+    } catch (dbwrapper_error&) {
+        return {ChainstateLoadStatus::FAILURE, strprintf(Untranslated("Error opening block database."))};
     } catch (std::exception& e) {
         return {ChainstateLoadStatus::FAILURE_FATAL, strprintf(Untranslated("Failed to initialize ChainstateManager: %s"), e.what())};
     }
@@ -1247,7 +1255,6 @@ static ChainstateLoadResult InitAndLoadChainstate(
     };
     node::ChainstateLoadOptions options;
     options.mempool = Assert(node.mempool.get());
-    options.wipe_block_tree_db = do_reindex;
     options.wipe_chainstate_db = do_reindex || do_reindex_chainstate;
     options.prune = chainman.m_blockman.IsPruneMode();
     options.check_blocks = args.GetIntArg("-checkblocks", DEFAULT_CHECKBLOCKS);

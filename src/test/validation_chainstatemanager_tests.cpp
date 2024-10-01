@@ -386,6 +386,7 @@ struct SnapshotTestSetup : TestChain100Setup {
             const ChainstateManager::Options chainman_opts{
                 .chainparams = ::Params(),
                 .datadir = chainman.m_options.datadir,
+                .indexdir = chainman.m_options.indexdir,
                 .notifications = *m_node.notifications,
                 .signals = m_node.validation_signals.get(),
             };
@@ -795,6 +796,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
         static const ChainstateManager::Options options{
             .chainparams = ::Params(),
             .datadir = {},
+            .indexdir = {},
             .notifications = notifications};
         return SetOptsFromArgs(*this->m_node.args, options, args);
     };

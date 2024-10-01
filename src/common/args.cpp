@@ -304,6 +304,16 @@ fs::path ArgsManager::GetBlocksDirPath() const
     return path;
 }
 
+fs::path ArgsManager::GetIndexDir() const
+{
+    LOCK(cs_args);
+    const fs::path indexdir{GetPathArg("-blockindexdir")};
+    if (!indexdir.empty()) {
+        return fs::absolute(indexdir);
+    } else {
+        return GetDataDirNet() / "blocks" / "index";
+    }
+}
 fs::path ArgsManager::GetDataDir(bool net_specific) const
 {
     LOCK(cs_args);

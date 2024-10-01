@@ -232,6 +232,7 @@ protected:
      * @return Absolute path on success, otherwise an empty path when a non-directory path would be returned
      */
     fs::path GetDataDirNet() const { return GetDataDir(true); }
+    fs::path GetIndexDir() const;
 
     /**
      * Clear cached directory paths

@@ -81,7 +81,7 @@ class WalletCreateDescriptorTest(BitcoinTestFramework):
         assert_equal(new_descs[0][2], True)
 
         old_descs = curr_descs
-        wallet.createwalletdescriptor(type="silent-payment", internal=False)
+        wallet.createwalletdescriptor(type="silent-payments", internal=False)
         curr_descs = set([(d["desc"], d["active"], d["internal"]) for d in wallet.listdescriptors(private=True)["descriptors"]])
         new_descs = list(curr_descs - old_descs)
         assert_equal(len(new_descs), 1)
@@ -90,8 +90,8 @@ class WalletCreateDescriptorTest(BitcoinTestFramework):
         assert_equal(new_descs[0][1], True)
         assert_equal(new_descs[0][2], False)
 
-        assert_raises_rpc_error(-4, "Descriptor already exists", wallet.createwalletdescriptor, type="silent-payment", internal=False)
-        assert_raises_rpc_error(-4, "Descriptor already exists", wallet.createwalletdescriptor, type="silent-payment", internal=True) # SP descs are the same for both internal and external
+        assert_raises_rpc_error(-4, "Descriptor already exists", wallet.createwalletdescriptor, type="silent-payments", internal=False)
+        assert_raises_rpc_error(-4, "Descriptor already exists", wallet.createwalletdescriptor, type="silent-payments", internal=True) # SP descs are the same for both internal and external
 
     def test_imported_other_keys(self):
         self.log.info("Test createwalletdescriptor with multiple keys in active descriptors")

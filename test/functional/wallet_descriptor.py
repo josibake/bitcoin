@@ -218,7 +218,7 @@ class WalletDescriptorTest(BitcoinTestFramework):
                       ('p2sh-segwit', False, 'sh(wpkh(', '49h/1h/0h', -14),
                       ('bech32', False, 'wpkh(', '84h/1h/0h', -13),
                       ('bech32m', False, 'tr(', '86h/1h/0h', -13),
-                      ('silent-payment', False, 'sp(', '', 0),
+                      ('silent-payments', False, 'sp(', '', 0),
                       ('legacy', True, 'pkh(', '44h/1h/0h', -13),
                       ('p2sh-segwit', True, 'sh(wpkh(', '49h/1h/0h', -14),
                       ('bech32', True, 'wpkh(', '84h/1h/0h', -13),

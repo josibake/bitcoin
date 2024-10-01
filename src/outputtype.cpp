@@ -19,7 +19,7 @@ static const std::string OUTPUT_TYPE_STRING_LEGACY = "legacy";
 static const std::string OUTPUT_TYPE_STRING_P2SH_SEGWIT = "p2sh-segwit";
 static const std::string OUTPUT_TYPE_STRING_BECH32 = "bech32";
 static const std::string OUTPUT_TYPE_STRING_BECH32M = "bech32m";
-static const std::string OUTPUT_TYPE_STRING_SILENT_PAYMENT = "silent-payment";
+static const std::string OUTPUT_TYPE_STRING_SILENT_PAYMENT = "silent-payments";
 static const std::string OUTPUT_TYPE_STRING_UNKNOWN = "unknown";
 
 std::optional<OutputType> ParseOutputType(const std::string& type)

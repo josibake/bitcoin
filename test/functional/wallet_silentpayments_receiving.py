@@ -24,7 +24,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.log.info("Create encrypted wallet")
         self.nodes[0].createwallet(wallet_name="sp_encrypted", passphrase="unsigned integer", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp_encrypted")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
         self.log.info("Check that we can scan without the wallet being unlocked")
@@ -42,7 +42,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.log.info("Create un-encrypted wallet")
         self.nodes[0].createwallet(wallet_name="sp_unencrypted", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp_unencrypted")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
         assert_equal(wallet.getbalance(), 10)
@@ -61,19 +61,19 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         self.nodes[0].createwallet(wallet_name="sp", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         assert addr.startswith("sp")
 
         self.nodes[0].createwallet(wallet_name="non_sp", silent_payment=False)
         wallet = self.nodes[0].get_wallet_rpc("non_sp")
-        assert_raises_rpc_error(-12, "Error: No silent-payment addresses available", wallet.getnewaddress, address_type="silent-payment")
+        assert_raises_rpc_error(-12, "Error: No silent-payments addresses available", wallet.getnewaddress, address_type="silent-payments")
 
         if self.is_bdb_compiled():
             assert_raises_rpc_error(-4, "Wallet with silent payments must also be a descriptor wallet", self.nodes[0].createwallet, wallet_name="legacy_sp", descriptors=False, silent_payment=True)
 
             self.nodes[0].createwallet(wallet_name="legacy_sp", descriptors=False)
             wallet = self.nodes[0].get_wallet_rpc("legacy_sp")
-            assert_raises_rpc_error(-12, "Error: No silent-payment addresses available", wallet.getnewaddress, address_type="silent-payment")
+            assert_raises_rpc_error(-12, "Error: No silent-payments addresses available", wallet.getnewaddress, address_type="silent-payments")
 
     def test_basic(self):
         self.log.info("Basic receive and send")
@@ -81,8 +81,8 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.nodes[0].createwallet(wallet_name="basic", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("basic")
 
-        addr = wallet.getnewaddress(address_type="silent-payment")
-        addr_again = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
+        addr_again = wallet.getnewaddress(address_type="silent-payments")
         assert addr == addr_again
         txid = self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
@@ -91,7 +91,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         wallet.gettransaction(txid)
 
         self.log.info("Test getnewaddress returns new labelled address")
-        labeled_addr = wallet.getnewaddress(address_type="silent-payment", label="foo")
+        labeled_addr = wallet.getnewaddress(address_type="silent-payments", label="foo")
         assert labeled_addr != addr
         txid = self.def_wallet.sendtoaddress(labeled_addr, 10)
         self.generate(self.nodes[0], 1)
@@ -114,7 +114,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         self.nodes[0].createwallet(wallet_name="persistence_test", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("persistence_test")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         send_amount = 15
         txid = self.def_wallet.sendtoaddress(addr, send_amount)
         self.generate(self.nodes[0], 1)
@@ -141,7 +141,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         alice = self.nodes[0].get_wallet_rpc("alice")
         alice_wo = self.nodes[0].get_wallet_rpc("alice_wo")
 
-        address = alice.getnewaddress(address_type="silent-payment")
+        address = alice.getnewaddress(address_type="silent-payments")
         self.def_wallet.sendtoaddress(address, 10)
         blockhash = self.generate(self.nodes[0], 1)[0]
         timestamp = self.nodes[0].getblockheader(blockhash)["time"]
@@ -163,7 +163,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         self.nodes[0].createwallet(wallet_name="craig", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("craig")
-        address = wallet.getnewaddress(address_type="silent-payment")
+        address = wallet.getnewaddress(address_type="silent-payments")
 
         txid = self.def_wallet.sendtoaddress(address, 49.99, replaceable=True)
         assert_equal(self.nodes[0].getrawmempool(), [txid])

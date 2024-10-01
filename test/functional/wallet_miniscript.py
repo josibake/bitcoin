@@ -244,7 +244,7 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         if desc.startswith("tr("):
             addr_type = "bech32m"
         elif desc.startswith("sp("):
-            addr_type = "silent-payment"
+            addr_type = "silent-payments"
 
         if range is not None:
             assert_equal(
@@ -294,7 +294,7 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         self.log.info("Generating an address for it and testing it detects funds")
         addr_type = "bech32m"
         if is_silent_payments:
-            addr_type = "silent-payment"
+            addr_type = "silent-payments"
         elif is_taproot == False:
             addr_type = "bech32"
         addr = self.ms_sig_wallet.getnewaddress(address_type=addr_type)

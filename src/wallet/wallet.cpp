@@ -3607,12 +3607,15 @@ std::set<ScriptPubKeyMan*> CWallet::GetAllScriptPubKeyMans() const
 
 ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const OutputType& type, bool internal) const
 {
-    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
-    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
-    if (it == spk_managers.end()) {
+    if (type == OutputType::SILENT_PAYMENT && internal) {
         return nullptr;
     }
-    return it->second;
+    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
+    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
+    if (it != spk_managers.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 std::set<ScriptPubKeyMan*> CWallet::GetScriptPubKeyMans(const CScript& script) const

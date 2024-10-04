@@ -43,6 +43,7 @@
 
 #include <memory>
 #include <stdint.h>
+#include <variant>
 
 using node::BlockAssembler;
 using node::CBlockTemplate;
@@ -284,6 +285,9 @@ static RPCHelpMan generatetoaddress()
     CTxDestination destination = DecodeDestination(request.params[1].get_str());
     if (!IsValidDestination(destination)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address");
+    }
+    if (std::get_if<V0SilentPaymentDestination>(&destination)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Cannot pay to Silent Payment Output in Coinbase transactions");
     }
 
     NodeContext& node = EnsureAnyNodeContext(request.context);

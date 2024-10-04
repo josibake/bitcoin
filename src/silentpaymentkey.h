@@ -11,12 +11,12 @@
 
 #include <cstring>
 
-const unsigned int BIP352_SPKEY_SIZE = 74;
+const unsigned int BIP352_SPKEY_SIZE_IN_BYTES = 71;
 
 struct SpPubKey {
     unsigned char version[1];
     unsigned char vchFingerprint[4];
-    int maximumNumberOfLabels;
+    unsigned char fAllowLabels; // sizeof(bool) might differ from 1 based on impl so use "unsigned char"
     CKey scanKey;
     CPubKey spendKey;
 
@@ -29,7 +29,7 @@ struct SpPubKey {
     {
       memset(version, 0, sizeof(version));
       memset(vchFingerprint, 0, sizeof(vchFingerprint));
-      maximumNumberOfLabels = 0;
+      fAllowLabels = true;
       CPubKey dummySpendPubKey;
       spendKey = dummySpendPubKey;
     }
@@ -38,14 +38,14 @@ struct SpPubKey {
     {
       memset(version, 0, sizeof(version));
       memset(vchFingerprint, 0, sizeof(vchFingerprint));
-      maximumNumberOfLabels = 0;
+      fAllowLabels = true;
     }
 
     friend bool operator==(const SpPubKey &a, const SpPubKey &b)
     {
       return memcmp(a.version, b.version, sizeof(version)) == 0 &&
           memcmp(a.vchFingerprint, b.vchFingerprint, sizeof(vchFingerprint)) == 0 &&
-          a.maximumNumberOfLabels == b.maximumNumberOfLabels &&
+          a.fAllowLabels == b.fAllowLabels &&
           a.scanKey == b.scanKey &&
           a.spendKey == b.spendKey;
     }
@@ -72,8 +72,13 @@ struct SpPubKey {
       return scanKey.IsValid() && spendKey.IsValid();
     }
 
-    void Encode(unsigned char code[BIP352_SPKEY_SIZE]) const;
-    void Decode(const unsigned char code[BIP352_SPKEY_SIZE]);
+    bool AllowLabels()
+    {
+      return fAllowLabels;
+    }
+
+    void Encode(unsigned char code[BIP352_SPKEY_SIZE_IN_BYTES]) const;
+    void Decode(const unsigned char code[BIP352_SPKEY_SIZE_IN_BYTES]);
 
     //! Get the KeyID of this Silent Payment public key (hash of its serialization)
     CKeyID GetID() const;
@@ -82,7 +87,7 @@ struct SpPubKey {
 struct SpKey {
     unsigned char version[1];
     unsigned char vchFingerprint[4];
-    int maximumNumberOfLabels;
+    unsigned char fAllowLabels; // sizeof(bool) might differ from 1 based on impl so use "unsigned char"
     CKey scanKey;
     CKey spendKey;
 
@@ -90,13 +95,13 @@ struct SpKey {
     {
       return memcmp(a.version, b.version, sizeof(version)) == 0 &&
           memcmp(a.vchFingerprint, b.vchFingerprint, sizeof(vchFingerprint)) == 0 &&
-          a.maximumNumberOfLabels == b.maximumNumberOfLabels &&
+          a.fAllowLabels == b.fAllowLabels &&
           a.scanKey == b.scanKey &&
           a.spendKey == b.spendKey;
     }
 
     SpKey() = default;
-    SpKey(const SpPubKey& sppub, const CKey& scanKey_in, const CKey& spendKey_in) : maximumNumberOfLabels(sppub.maximumNumberOfLabels), scanKey(scanKey_in), spendKey(spendKey_in)
+    SpKey(const SpPubKey& sppub, const CKey& scanKey_in, const CKey& spendKey_in) : fAllowLabels(sppub.fAllowLabels), scanKey(scanKey_in), spendKey(spendKey_in)
     {
       std::copy(sppub.version, sppub.version + sizeof(sppub.version), version);
       std::copy(sppub.vchFingerprint, sppub.vchFingerprint + sizeof(sppub.vchFingerprint), vchFingerprint);
@@ -107,8 +112,13 @@ struct SpKey {
       return scanKey.IsValid() && spendKey.IsValid();
     }
 
-    void Encode(unsigned char code[BIP352_SPKEY_SIZE]) const;
-    void Decode(const unsigned char code[BIP352_SPKEY_SIZE]);
+    bool AllowLabels()
+    {
+      return fAllowLabels;
+    }
+
+    void Encode(unsigned char code[BIP352_SPKEY_SIZE_IN_BYTES]) const;
+    void Decode(const unsigned char code[BIP352_SPKEY_SIZE_IN_BYTES]);
     SpPubKey Neuter();
 };
 

@@ -1241,12 +1241,17 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const std::ma
 
         bool fExisted = mapWallet.count(tx.GetHash()) != 0;
         if (fExisted && !fUpdate) return false;
-        if (fExisted || IsMine(tx, spent_coins) || IsFromMe(tx))
+
+        std::map<XOnlyPubKey, std::optional<CPubKey>> silent_payment_outputs;
+        bool isMineSilentPayment = !tx.IsCoinBase() && IsMineSilentPayment(tx, spent_coins, silent_payment_outputs);
+        if (fExisted || IsMine(tx) || isMineSilentPayment || IsFromMe(tx))
         {
             /* Check if any keys in the wallet keypool that were supposed to be unused
              * have appeared in a new transaction. If so, remove those keys from the keypool.
              * This can happen when restoring an old wallet backup that does not contain
              * the mostly recently created transactions from newer versions of the wallet.
+             * 
+             * Also find any labelled silent payment taproot scriptPubKeys and add them to the AddressBook
              */
 
             // loop though all outputs
@@ -1267,6 +1272,25 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const std::ma
                         if (!*dest.internal && !FindAddressBookEntry(dest.dest, /* allow_change= */ false)) {
                             SetAddressBook(dest.dest, "", AddressPurpose::RECEIVE);
                         }
+                    }
+
+                    SilentPaymentDescriptorScriptPubKeyMan* sp_spk_man = dynamic_cast<SilentPaymentDescriptorScriptPubKeyMan*>(spk_man);
+                    CTxDestination dest;
+                    ExtractDestination(txout.scriptPubKey, dest);
+                    const WitnessV1Taproot* xonlypubkey = std::get_if<WitnessV1Taproot>(&dest);
+                    if (sp_spk_man == nullptr || !isMineSilentPayment || xonlypubkey == nullptr) continue;
+
+                    auto it = silent_payment_outputs.find(*xonlypubkey);
+                    if (it == silent_payment_outputs.end() || !it->second.has_value()) continue;
+
+                    auto parent_dest = sp_spk_man->GetLabelledSPDestination(*xonlypubkey, it->second.value());
+                    if (!parent_dest.has_value()) continue;
+                    auto parent_addr_data = FindAddressBookEntry(parent_dest.value());
+                    if (parent_addr_data) {
+                        SetAddressBook(dest, parent_addr_data->GetLabel(), AddressPurpose::RECEIVE);
+                    } else {
+                        SetAddressBook(*parent_dest, "", AddressPurpose::RECEIVE);
+                        SetAddressBook(dest, "", AddressPurpose::RECEIVE);
                     }
                 }
             }
@@ -1663,24 +1687,18 @@ bool CWallet::IsMine(const CTransaction& tx) const
     return false;
 }
 
-bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& spent_coins)
-{
-    AssertLockHeld(cs_wallet);
-    if (IsMine(tx)) return true;
 
-    // Check for silent payments too
-    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
-        auto  sp_data = GetSilentPaymentsData(tx, spent_coins);
-        if (!sp_data.has_value()) {
-            return false;
-        }
-        for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
-            if (sp_spkm->IsMine(sp_data->first, sp_data->second)) {
-                return true;
-            }
+bool CWallet::IsMineSilentPayment(const CTransaction& tx, const std::map<COutPoint, Coin>&  spent_coins, std::map<XOnlyPubKey, std::optional<CPubKey>>& found_outputs) {
+    AssertLockHeld(cs_wallet);
+
+    auto sp_data = GetSilentPaymentsData(tx, spent_coins);
+    if (!sp_data.has_value()) return false;
+    for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
+        if (sp_spkm->IsMine(sp_data->first, sp_data->second, found_outputs)) {
+            return true;
         }
     }
-
+        
     return false;
 }
 
@@ -2670,28 +2688,42 @@ void CWallet::MarkDestinationsDirty(const std::set<CTxDestination>& destinations
     }
 }
 
-void CWallet::ForEachAddrBookEntry(const ListAddrBookFunc& func) const
+void CWallet::ForEachAddrBookEntry(const ListAddrBookFunc& func, const std::optional<AddrBookFilter>& _filter) const
 {
     AssertLockHeld(cs_wallet);
+    AddrBookFilter filter = _filter ? *_filter : AddrBookFilter();
     for (const std::pair<const CTxDestination, CAddressBookData>& item : m_address_book) {
         const auto& entry = item.second;
+        // Filter by change
+        if (filter.ignore_change && entry.IsChange()) continue;
+        // Filter by label
+        if (filter.m_op_label && *filter.m_op_label != entry.GetLabel()) continue;
+        // Filter by output type
+        if (filter.m_ignore_output_types) {
+            auto output_type = std::visit(DestinationToOutputTypeVisitor{}, item.first);
+            if (!output_type) continue;
+            bool is_ignored = false;
+            for (auto ignored_type : *filter.m_ignore_output_types) {
+                if (*output_type == ignored_type) {
+                    is_ignored = true;
+                    continue;
+                }
+            }
+            if (is_ignored) continue;
+        }
+
+        // All good
         func(item.first, entry.GetLabel(), entry.IsChange(), entry.purpose);
     }
 }
 
-std::vector<CTxDestination> CWallet::ListAddrBookAddresses(const std::optional<AddrBookFilter>& _filter) const
+std::vector<CTxDestination> CWallet::ListAddrBookAddresses(const std::optional<AddrBookFilter>& filter) const
 {
     AssertLockHeld(cs_wallet);
     std::vector<CTxDestination> result;
-    AddrBookFilter filter = _filter ? *_filter : AddrBookFilter();
-    ForEachAddrBookEntry([&result, &filter](const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) {
-        // Filter by change
-        if (filter.ignore_change && is_change) return;
-        // Filter by label
-        if (filter.m_op_label && *filter.m_op_label != label) return;
-        // All good
+    ForEachAddrBookEntry([&result](const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) {
         result.emplace_back(dest);
-    });
+    }, filter);
     return result;
 }
 
@@ -2705,7 +2737,7 @@ std::set<std::string> CWallet::ListAddrBookLabels(const std::optional<AddressPur
         if (!purpose || purpose == _purpose) {
             label_set.insert(_label);
         }
-    });
+    }, std::nullopt);
     return label_set;
 }
 
@@ -3607,12 +3639,15 @@ std::set<ScriptPubKeyMan*> CWallet::GetAllScriptPubKeyMans() const
 
 ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const OutputType& type, bool internal) const
 {
-    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
-    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
-    if (it == spk_managers.end()) {
+    if (type == OutputType::SILENT_PAYMENT && internal) {
         return nullptr;
     }
-    return it->second;
+    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
+    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
+    if (it != spk_managers.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 std::set<ScriptPubKeyMan*> CWallet::GetScriptPubKeyMans(const CScript& script) const

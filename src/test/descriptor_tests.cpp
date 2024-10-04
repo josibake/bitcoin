@@ -682,38 +682,38 @@ BOOST_AUTO_TEST_CASE(descriptor_test)
     // Silent Payments
     // Check that /* uses default derivation path for SP
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/*,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/*)",
-        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdg3tdld9)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)");
+        "sp(spprv1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5ww8yph)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)");
 
     // Check that no path uses default derivation path for SP
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
-        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdg3tdld9)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)");
+        "sp(spprv1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5ww8yph)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)");
 
     // Check that provided path is used instead of the default derivation path for SP
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/0h)",
-        "sp(spprv1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5qwmvhpf70wwlfxmkfmfm8dargka4qgec2fkmxcpvr3tgkezxs2l6sf4t658)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p457zxv2j2yzn9ha42hxhf3fkqdz5pc5hykqevp765qrrsdn7vc4skd7hrr)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p457zxv2j2yzn9ha42hxhf3fkqdz5pc5hykqevp765qrrsdn7vc4skd7hrr)");
+        "sp(spprv1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90ag3njkw0)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q660prx9f9zpfjm764tnt5c5mqx32qu2tjtqvkqld2qp3cxelxv2ccvc7ax)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q660prx9f9zpfjm764tnt5c5mqx32qu2tjtqvkqld2qp3cxelxv2ccvc7ax)");
 
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/0h,xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",
-        "sp(spprv1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agqw3uewwg77eaq9rth6er3vj0yutvs5xyup0ndsrg2ffwgheppkkdgnemptj)",
-        "sp(sppub1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agpnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtss5pst7p)",
-        "sp(sppub1qqqqqqqqqqqqqq8dkts5l8h805ndmya5ank735tw6syvu9ymdnvqkpc45tv3rg90agpnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtss5pst7p)");
+        "sp(spprv1qqqqqqqqq8km9c20nmnh6fkajw6wem0g69hdgzxwzjdkekqtqu269kg35zh75q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5ht3stj)",
+        "sp(sppub1qqqqqqqqq8km9c20nmnh6fkajw6wem0g69hdgzxwzjdkekqtqu269kg35zh75qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cgufn4lq)",
+        "sp(sppub1qqqqqqqqq8km9c20nmnh6fkajw6wem0g69hdgzxwzjdkekqtqu269kg35zh75qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cgufn4lq)");
 
     // Check that xpubs are accepted for spend key
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5pnngmqzvcpt976aaqlhevn5qkv2y7sk42j0mpd7yzsut507jwgtssknx4ck)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg9v9p49)",
         MISSING_PRIVKEYS);
 
     CheckSilentPayments("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
-        "sp(sppub1qqqqqqqqqqqqqq8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5p8cjcfl7ucts5c4ln7tqfjvm9ledmcpdyq4s55kz6rmssl903az0qr6947z)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qnufvyllwv9c2v2lel9syexdjlukauqkjq2c22tpdpacg0jhc738sy4ufm5)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qnufvyllwv9c2v2lel9syexdjlukauqkjq2c22tpdpacg0jhc738sy4ufm5)",
+        "sp(sppub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qnufvyllwv9c2v2lel9syexdjlukauqkjq2c22tpdpacg0jhc738sy4ufm5)",
         MISSING_PRIVKEYS);
 
     CheckUnparsable("sp(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi)",

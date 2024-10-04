@@ -2841,18 +2841,15 @@ SilentPaymentDescriptorScriptPubKeyMan::SilentPaymentDescriptorScriptPubKeyMan(W
         throw std::runtime_error(std::string(__func__) + ": descriptor is not a Silent Payment Descriptor");
     }
 
-    // Populate m_map_label_tweaks if descriptor is Silent Payments
-    if (descriptor.descriptor->GetOutputType() == OutputType::SILENT_PAYMENT) {
-        auto sppubkey = GetSpPubKeyFrom(descriptor.descriptor);
-        if (!sppubkey.has_value()) {
-            throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
-        }
-        auto change_label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, 0);
-        m_map_label_tweaks.insert(change_label_data);
-        for (int i = 1; i < descriptor.next_index; i++) {
-            // Add the other generated labelled destinations
-            m_map_label_tweaks.insert(BIP352::CreateLabelTweak(sppubkey->scanKey, i));
-        }
+    auto sppubkey = GetSpPubKeyFrom(descriptor.descriptor);
+    if (!sppubkey.has_value()) {
+        throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
+    }
+    auto change_label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, 0);
+    m_map_label_tweaks.insert(change_label_data);
+    for (int i = 1; i < descriptor.next_index; i++) {
+        // Add the other generated labelled destinations
+        m_map_label_tweaks.insert(BIP352::CreateLabelTweak(sppubkey->scanKey, i));
     }
 }
 
@@ -2897,6 +2894,15 @@ V0SilentPaymentDestination SilentPaymentDescriptorScriptPubKeyMan::GetLabelledDe
 util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetNewLabelledDestination(uint64_t& index)
 {
     LOCK(cs_desc_man);
+
+    auto sppubkey = GetSpPubKeyFrom(m_wallet_descriptor.descriptor);
+    if (!sppubkey.has_value()) {
+        throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
+    }
+    if (!sppubkey->AllowLabels()) {
+        return util::Error{ .message=Untranslated("Failed to create new label destination. Labels not allowed") };
+    }
+
     auto dest = GetLabelledDestination(m_wallet_descriptor.next_index);
     index = m_wallet_descriptor.next_index; // Return the index for this destination
     m_wallet_descriptor.next_index++;
@@ -2914,7 +2920,7 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(const CScript& script)
     return ISMINE_NO;
 }
 
-isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKey> output_keys, BIP352::PubTweakData& public_data)
+isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKey> output_keys, BIP352::PubTweakData& public_data, std::map<XOnlyPubKey, std::optional<CPubKey>> &found_outputs)
 {
     LOCK(cs_desc_man);
     if (m_wallet_descriptor.descriptor->GetOutputType() != OutputType::SILENT_PAYMENT) {
@@ -2933,6 +2939,7 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(std::vector<XOnlyPubKe
         throw std::runtime_error(strprintf("Error during descriptors tweak top up. Cannot start db transaction wallet %s", m_storage.GetDisplayName()));
     }
     for (const auto& tweak : *tweaks) {
+        found_outputs.emplace(std::make_pair(tweak.output, tweak.label));
         if (!TopUpWithDB(batch, tweak.tweak)) {
             throw std::runtime_error(std::string(__func__) + ": writing tweak failed");
         }
@@ -3031,6 +3038,21 @@ std::vector<WalletDestination> SilentPaymentDescriptorScriptPubKeyMan::MarkUnuse
     // This concept does not apply Silent Payments as there is no cache of unused destinations/addresses
     // Still, we must subclass this because the original method tries to expand the descriptor which will result in an error for SP descriptors
     return {};
+}
+
+std::optional<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetLabelledSPDestination(const XOnlyPubKey xonlypubkey, const CPubKey label)
+{
+    LOCK(cs_desc_man);
+    
+    auto sppubkey = GetSpPubKeyFrom(m_wallet_descriptor.descriptor);
+    auto it = m_map_label_tweaks.find(label);
+    if (it == m_map_label_tweaks.end()) return std::nullopt;
+    auto label_tweak = it->second;
+    CPubKey tweaked_pubkey(sppubkey->spendKey.begin(), sppubkey->spendKey.end());
+    tweaked_pubkey.TweakAdd(label_tweak.data());
+
+    V0SilentPaymentDestination sp_dest(sppubkey->scanKey.GetPubKey(), tweaked_pubkey);
+    return sp_dest;
 }
 
 } // namespace wallet

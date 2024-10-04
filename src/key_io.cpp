@@ -339,7 +339,7 @@ SpKey DecodeSpKey(const std::string& str)
     auto result = bech32::Decode(str, bech32::CharLimit::SILENT_PAYMENTS);
     bool isValid = result.encoding == bech32::Encoding::BECH32M && result.hrp == Params().SilentPaymentKeyHRP(false);
     std::vector<unsigned char> data_out = {};
-    data_out.reserve(BIP352_SPKEY_SIZE);
+    data_out.reserve(BIP352_SPKEY_SIZE_IN_BYTES);
     isValid &= ConvertBits<5, 8, false>([&](unsigned char c) { data_out.push_back(c); }, result.data.begin(), result.data.end());
     if (isValid) {
         key.Decode(data_out.data());
@@ -349,10 +349,10 @@ SpKey DecodeSpKey(const std::string& str)
 
 std::string EncodeSpKey(const SpKey& key)
 {
-    std::vector<unsigned char> data(BIP352_SPKEY_SIZE);
+    std::vector<unsigned char> data(BIP352_SPKEY_SIZE_IN_BYTES);
     key.Encode(data.data());
     std::vector<unsigned char> data_out = {};
-    data_out.reserve(((BIP352_SPKEY_SIZE * 8) / 5)+1);
+    data_out.reserve(((BIP352_SPKEY_SIZE_IN_BYTES * 8) / 5)+1);
     ConvertBits<8, 5, true>([&](unsigned char c) { data_out.push_back(c); }, data.begin(), data.end());
     auto ret = bech32::Encode(bech32::Encoding::BECH32M, Params().SilentPaymentKeyHRP(false), data_out);
     memory_cleanse(data.data(), data.size());
@@ -367,7 +367,7 @@ SpPubKey DecodeSpPubKey(const std::string& str)
     bool isValid = result.encoding == bech32::Encoding::BECH32M &&
         result.hrp == Params().SilentPaymentKeyHRP();
     std::vector<unsigned char> data_out = {};
-    data_out.reserve(BIP352_SPKEY_SIZE);
+    data_out.reserve(BIP352_SPKEY_SIZE_IN_BYTES);
     isValid &= ConvertBits<5, 8, false>([&](unsigned char c) { data_out.push_back(c); }, result.data.begin(), result.data.end());
     if (isValid) {
         key.Decode(data_out.data());
@@ -377,10 +377,10 @@ SpPubKey DecodeSpPubKey(const std::string& str)
 
 std::string EncodeSpPubKey(const SpPubKey& key)
 {
-    std::vector<unsigned char> data(BIP352_SPKEY_SIZE);
+    std::vector<unsigned char> data(BIP352_SPKEY_SIZE_IN_BYTES);
     key.Encode(data.data());
     std::vector<unsigned char> data_out = {};
-    data_out.reserve(((BIP352_SPKEY_SIZE * 8) / 5)+1);
+    data_out.reserve(((BIP352_SPKEY_SIZE_IN_BYTES * 8) / 5)+1);
     ConvertBits<8, 5, true>([&](unsigned char c) { data_out.push_back(c); }, data.begin(), data.end());
     auto ret = bech32::Encode(bech32::Encoding::BECH32M, Params().SilentPaymentKeyHRP(), data_out);
     memory_cleanse(data.data(), data.size());

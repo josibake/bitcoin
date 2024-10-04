@@ -575,7 +575,7 @@ class SilentPubkeyProvider final : public PubkeyProvider
 public:
     SilentPubkeyProvider(uint32_t exp_index, const SpPubKey& sppk) : PubkeyProvider(exp_index), m_sppk(sppk) {}
     bool IsRange() const override { return false; }
-    size_t GetSize() const override { return BIP352_SPKEY_SIZE; }
+    size_t GetSize() const override { return BIP352_SPKEY_SIZE_IN_BYTES; }
     bool GetPubKey(int pos, const SigningProvider& arg, CPubKey& key, KeyOriginInfo& info, const DescriptorCache* read_cache = nullptr, DescriptorCache* write_cache = nullptr) const override
     {
         return false;
@@ -619,14 +619,14 @@ public:
         if (!arg.GetKey(m_sppk.spendKey.GetID(), spendKey)) return false;
         ret.scanKey = m_sppk.scanKey;
         ret.spendKey = spendKey;
-        ret.maximumNumberOfLabels = m_sppk.maximumNumberOfLabels;
+        ret.fAllowLabels = m_sppk.fAllowLabels;
         std::copy(m_sppk.version, m_sppk.version + sizeof(m_sppk.version), ret.version);
         std::copy(m_sppk.vchFingerprint, m_sppk.vchFingerprint + sizeof(ret.vchFingerprint), ret.vchFingerprint);
         return true;
     }
     bool GetSpPubKey(SpPubKey& ret) const
     {
-        ret.maximumNumberOfLabels = m_sppk.maximumNumberOfLabels;
+        ret.fAllowLabels = m_sppk.fAllowLabels;
         std::copy(m_sppk.version, m_sppk.version + sizeof(m_sppk.version), ret.version);
         std::copy(m_sppk.vchFingerprint, m_sppk.vchFingerprint + sizeof(ret.vchFingerprint), ret.vchFingerprint);
         ret.scanKey = m_sppk.scanKey;

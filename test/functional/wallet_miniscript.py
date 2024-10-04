@@ -56,7 +56,7 @@ DESCS = [
     # A Taproot with all above scripts in its tree.
     f"tr(4d54bb9928a0683b7e383de72943b214b0716f58aa54c7ba6bcea2328bc9c768,{{{{{P2WSH_MINISCRIPTS[0]},{P2WSH_MINISCRIPTS[1]}}},{{{P2WSH_MINISCRIPTS[2].replace('multi', 'multi_a')},{P2WSH_MINISCRIPTS[3]}}}}})",
     f"sp({TPRVS[0]},{TPUBS[0]})",
-    "sp(sprtpub1qqqqqqqqqqqqqqz2cezqye6220rn3xzpxu5lxdh8l89x6mvvz25vx699mlz5tss635p7y6txdrl97smz23cmxylj0wmtygzulgc9ynpctsj8g3zxp9eycgcpvngw9)",
+    "sp(sprtpub1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2qee5dspxvq4jldw7s0mukf6qtx9z0gt24f8asklzpgw968lf8y9cg0wxxt4)",
 ]
 
 DESCS_PRIV = [
@@ -209,6 +209,13 @@ DESCS_PRIV = [
         "sigs_count": 1,
         "stack_size": 1,
     },
+    {
+        "desc": "sp(sprtprv1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5yvyrl8)",
+        "sequence": None,
+        "locktime": None,
+        "sigs_count": 1,
+        "stack_size": 1,
+    }
 ]
 
 

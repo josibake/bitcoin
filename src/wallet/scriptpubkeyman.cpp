@@ -2841,18 +2841,15 @@ SilentPaymentDescriptorScriptPubKeyMan::SilentPaymentDescriptorScriptPubKeyMan(W
         throw std::runtime_error(std::string(__func__) + ": descriptor is not a Silent Payment Descriptor");
     }
 
-    // Populate m_map_label_tweaks if descriptor is Silent Payments
-    if (descriptor.descriptor->GetOutputType() == OutputType::SILENT_PAYMENT) {
-        auto sppubkey = GetSpPubKeyFrom(descriptor.descriptor);
-        if (!sppubkey.has_value()) {
-            throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
-        }
-        auto change_label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, 0);
-        m_map_label_tweaks.insert(change_label_data);
-        for (int i = 1; i < descriptor.next_index; i++) {
-            // Add the other generated labelled destinations
-            m_map_label_tweaks.insert(BIP352::CreateLabelTweak(sppubkey->scanKey, i));
-        }
+    auto sppubkey = GetSpPubKeyFrom(descriptor.descriptor);
+    if (!sppubkey.has_value()) {
+        throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
+    }
+    auto change_label_data = BIP352::CreateLabelTweak(sppubkey->scanKey, 0);
+    m_map_label_tweaks.insert(change_label_data);
+    for (int i = 1; i < descriptor.next_index; i++) {
+        // Add the other generated labelled destinations
+        m_map_label_tweaks.insert(BIP352::CreateLabelTweak(sppubkey->scanKey, i));
     }
 }
 
@@ -2897,6 +2894,15 @@ V0SilentPaymentDestination SilentPaymentDescriptorScriptPubKeyMan::GetLabelledDe
 util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetNewLabelledDestination(uint64_t& index)
 {
     LOCK(cs_desc_man);
+
+    auto sppubkey = GetSpPubKeyFrom(m_wallet_descriptor.descriptor);
+    if (!sppubkey.has_value()) {
+        throw std::runtime_error(std::string(__func__) + ": descriptor expansion failed");
+    }
+    if (!sppubkey->AllowLabels()) {
+        return util::Error{ .message=Untranslated("Failed to create new label destination. Labels not allowed") };
+    }
+
     auto dest = GetLabelledDestination(m_wallet_descriptor.next_index);
     index = m_wallet_descriptor.next_index; // Return the index for this destination
     m_wallet_descriptor.next_index++;

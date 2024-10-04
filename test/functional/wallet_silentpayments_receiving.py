@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from test_framework.descriptors import descsum_create
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_approx,
@@ -44,6 +45,32 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         assert_equal(wallet_txs_by_label[0]["amount"], 10)
         assert_equal(wallet_txs_by_label[0]["label"], "test")
         assert_equal(wallet.getreceivedbylabel("test"), 10)
+
+        self.log.info("Check that a silent payments wallet allows labels only when the SP desc allows it")
+        allow_labels_desc = descsum_create("sp(sprtprv1qqqqqqqqq850xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5yvyrl8)")
+        disallow_labels_desc = descsum_create("sp(sprtprv1qqqqqqqqqr50xtnj8hk0gpg6a7kgutyne8zmy9p38qtumvq6zj2tj97ggd4n2q8g7vh8y00v7sz34mav3ckf8jw9kg2rzwqhekcp59y5hytussmtx5vlynje)")
+
+        self.nodes[0].createwallet(wallet_name="allow_labels", blank=True, silent_payment=True)
+        allow_labels_wallet = self.nodes[0].get_wallet_rpc("allow_labels")
+        assert allow_labels_wallet.importdescriptors([{
+            "desc": allow_labels_desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": "now"
+        }])[0]["success"]
+        allow_labels_wallet.getnewaddress(address_type="silent-payments", label="test")
+        assert_equal(allow_labels_wallet.listlabels(), ["test"])
+
+        self.nodes[0].createwallet(wallet_name="disallow_labels", blank=True, silent_payment=True)
+        disallow_labels_wallet = self.nodes[0].get_wallet_rpc("disallow_labels")
+        assert disallow_labels_wallet.importdescriptors([{
+            "desc": disallow_labels_desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": "now"
+        }])[0]["success"]
+        assert_raises_rpc_error(-12, "Failed to create new label destination. Labels not allowed", disallow_labels_wallet.getnewaddress, address_type="silent-payments", label="test")
+        assert_equal(disallow_labels_wallet.listlabels(), [])
 
     def test_encrypt_and_decrypt(self):
         self.log.info("Check that a silent payments wallet can be encrypted and decrypted")

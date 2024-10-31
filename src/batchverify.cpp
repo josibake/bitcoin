@@ -35,8 +35,7 @@ bool BatchSchnorrVerifier::Add(const Span<const unsigned char> sig, const XOnlyP
     }
 
     secp256k1_xonly_pubkey pubkey_parsed;
-    (void)secp256k1_xonly_pubkey_parse(secp256k1_context_static, &pubkey_parsed, pubkey.data());
-
+    if (!secp256k1_xonly_pubkey_parse(secp256k1_context_static, &pubkey_parsed, pubkey.data())) return false;
     return secp256k1_batch_add_schnorrsig(secp256k1_context_static, m_batch, sig.data(), sighash.begin(), 32, &pubkey_parsed);
 }
 

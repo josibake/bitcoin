@@ -81,7 +81,7 @@ bool CachingTransactionSignatureChecker::VerifySchnorrSignature(Span<const unsig
     m_signature_cache.ComputeEntrySchnorr(entry, sighash, sig, pubkey);
     if (m_signature_cache.Get(entry, !store)) return true;
     if (!TransactionSignatureChecker::VerifySchnorrSignature(sig, pubkey, sighash)) return false;
-    if (store) m_signature_cache.Set(entry);
+    // if (store) signatureCache.Set(entry);
     return true;
 }
 

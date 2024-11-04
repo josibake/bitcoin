@@ -235,7 +235,7 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             .check_block_index = 1,
             .notifications = *m_node.notifications,
             .signals = m_node.validation_signals.get(),
-            .worker_threads_num = 2,
+            .worker_threads_num = 0,
         };
         if (opts.min_validation_cache) {
             chainman_opts.script_execution_cache_bytes = 0;

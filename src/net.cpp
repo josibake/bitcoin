@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <net.h>
 
@@ -12,6 +12,7 @@
 #include <banman.h>
 #include <clientversion.h>
 #include <common/args.h>
+#include <common/netif.h>
 #include <compat/compat.h>
 #include <consensus/consensus.h>
 #include <crypto/sha256.h>
@@ -28,7 +29,6 @@
 #include <random.h>
 #include <scheduler.h>
 #include <util/fs.h>
-#include <util/netif.h>
 #include <util/sock.h>
 #include <util/strencodings.h>
 #include <util/thread.h>
@@ -2950,7 +2950,7 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         return;
     pnode->grantOutbound = std::move(grant_outbound);
 
-    m_msgproc->InitializeNode(*pnode, nLocalServices);
+    m_msgproc->InitializeNode(*pnode, m_local_services);
     {
         LOCK(m_nodes_mutex);
         m_nodes.push_back(pnode);
@@ -3094,7 +3094,7 @@ bool CConnman::BindListenPort(const CService& addrBind, bilingual_str& strError,
     if (sock->Bind(reinterpret_cast<struct sockaddr*>(&sockaddr), len) == SOCKET_ERROR) {
         int nErr = WSAGetLastError();
         if (nErr == WSAEADDRINUSE)
-            strError = strprintf(_("Unable to bind to %s on this computer. %s is probably already running."), addrBind.ToStringAddrPort(), PACKAGE_NAME);
+            strError = strprintf(_("Unable to bind to %s on this computer. %s is probably already running."), addrBind.ToStringAddrPort(), CLIENT_NAME);
         else
             strError = strprintf(_("Unable to bind to %s on this computer (bind returned error %s)"), addrBind.ToStringAddrPort(), NetworkErrorString(nErr));
         LogPrintLevel(BCLog::NET, BCLog::Level::Error, "%s\n", strError.original);
@@ -3711,7 +3711,7 @@ uint64_t CConnman::GetTotalBytesSent() const
 
 ServiceFlags CConnman::GetLocalServices() const
 {
-    return nLocalServices;
+    return m_local_services;
 }
 
 static std::unique_ptr<Transport> MakeTransport(NodeId id, bool use_v2transport, bool inbound) noexcept

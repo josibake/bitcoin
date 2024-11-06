@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <rpc/server.h>
 
@@ -154,12 +154,12 @@ static RPCHelpMan help()
 
 static RPCHelpMan stop()
 {
-    static const std::string RESULT{PACKAGE_NAME " stopping"};
+    static const std::string RESULT{CLIENT_NAME " stopping"};
     return RPCHelpMan{"stop",
     // Also accept the hidden 'wait' integer argument (milliseconds)
     // For instance, 'stop 1000' makes the call wait 1 second before returning
     // to the client (intended for testing)
-                "\nRequest a graceful shutdown of " PACKAGE_NAME ".",
+                "\nRequest a graceful shutdown of " CLIENT_NAME ".",
                 {
                     {"wait", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "how long to wait in ms", RPCArgOptions{.hidden=true}},
                 },
@@ -169,7 +169,7 @@ static RPCHelpMan stop()
 {
     // Event loop will exit after current HTTP requests have been handled, so
     // this reply will get back to the client.
-    CHECK_NONFATAL((*CHECK_NONFATAL(EnsureAnyNodeContext(jsonRequest.context).shutdown))());
+    CHECK_NONFATAL((CHECK_NONFATAL(EnsureAnyNodeContext(jsonRequest.context).shutdown_request))());
     if (jsonRequest.params[0].isNum()) {
         UninterruptibleSleep(std::chrono::milliseconds{jsonRequest.params[0].getInt<int>()});
     }
@@ -294,7 +294,7 @@ void InterruptRPC()
     });
 }
 
-void StopRPC(const std::any& context)
+void StopRPC()
 {
     static std::once_flag g_rpc_stop_flag;
     // This function could be called twice if the GUI has been started with -server=1.
@@ -303,9 +303,6 @@ void StopRPC(const std::any& context)
         LogDebug(BCLog::RPC, "Stopping RPC\n");
         WITH_LOCK(g_deadline_timers_mutex, deadlineTimers.clear());
         DeleteAuthCookie();
-        node::NodeContext& node = EnsureAnyNodeContext(context);
-        // The notifications interface doesn't exist between initialization step 4a and 7.
-        if (node.notifications) node.notifications->m_tip_block_cv.notify_all();
         LogDebug(BCLog::RPC, "RPC stopped.\n");
     });
 }

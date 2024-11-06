@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <init.h>
 
@@ -54,6 +54,7 @@
 #include <node/mempool_persist_args.h>
 #include <node/miner.h>
 #include <node/peerman_args.h>
+#include <node/utxo_snapshot.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
@@ -140,6 +141,7 @@ using node::VerifyLoadedChainstate;
 using util::Join;
 using util::ReplaceAll;
 using util::ToString;
+using node::SnapshotMetadata;
 
 static constexpr bool DEFAULT_PROXYRANDOMIZE{true};
 static constexpr bool DEFAULT_REST_ENABLE{false};
@@ -157,6 +159,44 @@ static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
 
 static constexpr int MIN_CORE_FDS = MIN_LEVELDB_FDS + NUM_FDS_MESSAGE_CAPTURE;
 static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
+
+bool LoadUTXOSnapshot(NodeContext& node, const fs::path& snapshot_path) {
+    ChainstateManager& chainman = *node.chainman;
+
+    FILE* file{fsbridge::fopen(snapshot_path, "rb")};
+    AutoFile afile{file};
+    if (afile.IsNull()) {
+        LogPrintf("Error: Couldn't open UTXO snapshot file %s for reading\n", snapshot_path.utf8string());
+        return false;
+    }
+
+    SnapshotMetadata metadata{chainman.GetParams().MessageStart()};
+    try {
+        afile >> metadata;
+    } catch (const std::ios_base::failure& e) {
+        LogPrintf("Error: Unable to parse snapshot metadata: %s\n", e.what());
+        return false;
+    }
+
+    auto activation_result{chainman.ActivateSnapshot(afile, metadata, false)};
+    if (!activation_result) {
+        LogPrintf("Error: Unable to load UTXO snapshot: %s\n",
+                  util::ErrorString(activation_result).original);
+        return false;
+    }
+
+    // Update services to reflect limited peer capabilities during sync
+    node.connman->RemoveLocalServices(NODE_NETWORK);
+    node.connman->AddLocalServices(NODE_NETWORK_LIMITED);
+
+    CBlockIndex& snapshot_index{*CHECK_NONFATAL(*activation_result)};
+    LogPrintf("Loaded UTXO snapshot: coins=%d, height=%d, hash=%s\n",
+              metadata.m_coins_count,
+              snapshot_index.nHeight,
+              snapshot_index.GetBlockHash().ToString());
+
+    return true;
+}
 
 /**
  * The PID file facilities.
@@ -207,7 +247,14 @@ void InitContext(NodeContext& node)
     g_shutdown.emplace();
 
     node.args = &gArgs;
-    node.shutdown = &*g_shutdown;
+    node.shutdown_signal = &*g_shutdown;
+    node.shutdown_request = [&node] {
+        assert(node.shutdown_signal);
+        if (!(*node.shutdown_signal)()) return false;
+        // Wake any threads that may be waiting for the tip to change.
+        if (node.notifications) WITH_LOCK(node.notifications->m_tip_block_mutex, node.notifications->m_tip_block_cv.notify_all());
+        return true;
+    };
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -235,7 +282,7 @@ void InitContext(NodeContext& node)
 
 bool ShutdownRequested(node::NodeContext& node)
 {
-    return bool{*Assert(node.shutdown)};
+    return bool{*Assert(node.shutdown_signal)};
 }
 
 #if HAVE_SYSTEM
@@ -286,7 +333,7 @@ void Shutdown(NodeContext& node)
 
     StopHTTPRPC();
     StopREST();
-    StopRPC(&node);
+    StopRPC();
     StopHTTPServer();
     for (const auto& client : node.chain_clients) {
         client->flush();
@@ -488,6 +535,12 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-minimumchainwork=<hex>", strprintf("Minimum work assumed to exist on a valid chain in hex (default: %s, testnet3: %s, testnet4: %s, signet: %s)", defaultChainParams->GetConsensus().nMinimumChainWork.GetHex(), testnetChainParams->GetConsensus().nMinimumChainWork.GetHex(), testnet4ChainParams->GetConsensus().nMinimumChainWork.GetHex(), signetChainParams->GetConsensus().nMinimumChainWork.GetHex()), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::OPTIONS);
     argsman.AddArg("-par=<n>", strprintf("Set the number of script verification threads (0 = auto, up to %d, <0 = leave that many cores free, default: %d)",
         MAX_SCRIPTCHECK_THREADS, DEFAULT_SCRIPTCHECK_THREADS), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-pausebackgroundsync", strprintf("When a UTXO snapshot is loaded, pause the verification of historical blocks in the background (default: %u)", DEFAULT_PAUSE_BACKGROUND_SYNC), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-loadutxosnapshot=<path>",
+                 "Load UTXO set from snapshot file at startup. "
+                 "This allows fast synchronization by loading a pre-built UTXO "
+                 "snapshot while the full chain validation happens in background.",
+                 ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-persistmempool", strprintf("Whether to save the mempool on shutdown and load on restart (default: %u)", DEFAULT_PERSIST_MEMPOOL), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-persistmempoolv1",
                    strprintf("Whether a mempool.dat file created by -persistmempool or the savemempool RPC will be written in the legacy format "
@@ -554,11 +607,8 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-peertimeout=<n>", strprintf("Specify a p2p connection timeout delay in seconds. After connecting to a peer, wait this amount of time before considering disconnection based on inactivity (minimum: 1, default: %d)", DEFAULT_PEER_CONNECT_TIMEOUT), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-torcontrol=<ip>:<port>", strprintf("Tor control host and port to use if onion listening enabled (default: %s). If no port is specified, the default port of %i will be used.", DEFAULT_TOR_CONTROL, DEFAULT_TOR_CONTROL_PORT), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-torpassword=<pass>", "Tor control port password (default: empty)", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::CONNECTION);
-#ifdef USE_UPNP
-    argsman.AddArg("-upnp", strprintf("Use UPnP to map the listening port (default: %u)", DEFAULT_UPNP), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-#else
-    hidden_args.emplace_back("-upnp");
-#endif
+    // UPnP support was dropped. We keep `-upnp` as a hidden arg to display a more user friendly error when set. TODO: remove (here and below) for 30.0.
+    argsman.AddArg("-upnp", "", ArgsManager::ALLOW_ANY, OptionsCategory::HIDDEN);
     argsman.AddArg("-natpmp", strprintf("Use PCP or NAT-PMP to map the listening port (default: %u)", DEFAULT_NATPMP), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-whitebind=<[permissions@]addr>", "Bind to the given address and add permission flags to the peers connecting to it. "
         "Use [host]:port notation for IPv6. Allowed permissions: " + Join(NET_PERMISSIONS_DOC, ", ") + ". "
@@ -678,21 +728,6 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddHiddenArgs(hidden_args);
 }
 
-static bool fHaveGenesis = false;
-static GlobalMutex g_genesis_wait_mutex;
-static std::condition_variable g_genesis_wait_cv;
-
-static void BlockNotifyGenesisWait(const CBlockIndex* pBlockIndex)
-{
-    if (pBlockIndex != nullptr) {
-        {
-            LOCK(g_genesis_wait_mutex);
-            fHaveGenesis = true;
-        }
-        g_genesis_wait_cv.notify_all();
-    }
-}
-
 #if HAVE_SYSTEM
 static void StartupNotify(const ArgsManager& args)
 {
@@ -707,7 +742,7 @@ static void StartupNotify(const ArgsManager& args)
 static bool AppInitServers(NodeContext& node)
 {
     const ArgsManager& args = *Assert(node.args);
-    if (!InitHTTPServer(*Assert(node.shutdown))) {
+    if (!InitHTTPServer(*Assert(node.shutdown_signal))) {
         return false;
     }
     StartRPC();
@@ -748,8 +783,6 @@ void InitParameterInteraction(ArgsManager& args)
             LogInfo("parameter interaction: -proxy set -> setting -listen=0\n");
         // to protect privacy, do not map ports when a proxy is set. The user may still specify -listen=1
         // to listen locally, so don't rely on this happening through -listen below.
-        if (args.SoftSetBoolArg("-upnp", false))
-            LogInfo("parameter interaction: -proxy set -> setting -upnp=0\n");
         if (args.SoftSetBoolArg("-natpmp", false)) {
             LogInfo("parameter interaction: -proxy set -> setting -natpmp=0\n");
         }
@@ -760,8 +793,6 @@ void InitParameterInteraction(ArgsManager& args)
 
     if (!args.GetBoolArg("-listen", DEFAULT_LISTEN)) {
         // do not map ports or try to retrieve public IP when not listening (pointless)
-        if (args.SoftSetBoolArg("-upnp", false))
-            LogInfo("parameter interaction: -listen=0 -> setting -upnp=0\n");
         if (args.SoftSetBoolArg("-natpmp", false)) {
             LogInfo("parameter interaction: -listen=0 -> setting -natpmp=0\n");
         }
@@ -822,7 +853,7 @@ namespace { // Variables internal to initialization process only
 
 int nMaxConnections;
 int available_fds;
-ServiceFlags nLocalServices = ServiceFlags(NODE_NETWORK_LIMITED | NODE_WITNESS);
+ServiceFlags g_local_services = ServiceFlags(NODE_NETWORK_LIMITED | NODE_WITNESS);
 int64_t peer_connect_timeout;
 std::set<BlockFilterType> g_enabled_filter_types;
 
@@ -885,6 +916,12 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 
     // also see: InitParameterInteraction()
 
+    // We drop UPnP support but kept the arg as hidden for now to display a friendlier error to user who have the
+    // option in their config. TODO: remove (here and above) for version 30.0.
+    if (args.IsArgSet("-upnp")) {
+        return InitError(_("UPnP support was dropped in version 29.0. Consider using '-natpmp' instead."));
+    }
+
     // Error if network-specific options (-addnode, -connect, etc) are
     // specified in default section of config file, but not overridden
     // on the command line or in this chain's section of the config file.
@@ -937,7 +974,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 
     // Signal NODE_P2P_V2 if BIP324 v2 transport is enabled.
     if (args.GetBoolArg("-v2transport", DEFAULT_V2_TRANSPORT)) {
-        nLocalServices = ServiceFlags(nLocalServices | NODE_P2P_V2);
+        g_local_services = ServiceFlags(g_local_services | NODE_P2P_V2);
     }
 
     // Signal NODE_COMPACT_FILTERS if peerblockfilters and basic filters index are both enabled.
@@ -946,7 +983,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             return InitError(_("Cannot set -peerblockfilters without -blockfilterindex."));
         }
 
-        nLocalServices = ServiceFlags(nLocalServices | NODE_COMPACT_FILTERS);
+        g_local_services = ServiceFlags(g_local_services | NODE_COMPACT_FILTERS);
     }
 
     if (args.GetIntArg("-prune", 0)) {
@@ -1031,7 +1068,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     SetMockTime(args.GetIntArg("-mocktime", 0)); // SetMockTime(0) is a no-op
 
     if (args.GetBoolArg("-peerbloomfilters", DEFAULT_PEERBLOOMFILTERS))
-        nLocalServices = ServiceFlags(nLocalServices | NODE_BLOOM);
+        g_local_services = ServiceFlags(g_local_services | NODE_BLOOM);
 
     if (args.IsArgSet("-test")) {
         if (chainparams.GetChainType() != ChainType::REGTEST) {
@@ -1070,9 +1107,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         if (!blockman_result) {
             return InitError(util::ErrorString(blockman_result));
         }
-        CTxMemPool::Options mempool_opts{
-            .check_ratio = chainparams.DefaultConsistencyChecks() ? 1 : 0,
-        };
+        CTxMemPool::Options mempool_opts{};
         auto mempool_result{ApplyArgsManOptions(args, chainparams, mempool_opts)};
         if (!mempool_result) {
             return InitError(util::ErrorString(mempool_result));
@@ -1090,7 +1125,7 @@ static bool LockDataDirectory(bool probeOnly)
     case util::LockResult::ErrorWrite:
         return InitError(strprintf(_("Cannot write to data directory '%s'; check permissions."), fs::PathToString(datadir)));
     case util::LockResult::ErrorLock:
-        return InitError(strprintf(_("Cannot obtain a lock on data directory %s. %s is probably already running."), fs::PathToString(datadir), PACKAGE_NAME));
+        return InitError(strprintf(_("Cannot obtain a lock on data directory %s. %s is probably already running."), fs::PathToString(datadir), CLIENT_NAME));
     case util::LockResult::Success: return true;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
@@ -1102,11 +1137,11 @@ bool AppInitSanityChecks(const kernel::Context& kernel)
     auto result{kernel::SanityChecks(kernel)};
     if (!result) {
         InitError(util::ErrorString(result));
-        return InitError(strprintf(_("Initialization sanity check failed. %s is shutting down."), PACKAGE_NAME));
+        return InitError(strprintf(_("Initialization sanity check failed. %s is shutting down."), CLIENT_NAME));
     }
 
     if (!ECC_InitSanityCheck()) {
-        return InitError(strprintf(_("Elliptic curve cryptography sanity check failure. %s is shutting down."), PACKAGE_NAME));
+        return InitError(strprintf(_("Elliptic curve cryptography sanity check failure. %s is shutting down."), CLIENT_NAME));
     }
 
     // Probe the data directory lock to give an early error message, if possible
@@ -1181,7 +1216,7 @@ bool CheckHostPortOptions(const ArgsManager& args) {
     return true;
 }
 
-// A GUI user may opt to retry once if there is a failure during chainstate initialization.
+// A GUI user may opt to retry once with do_reindex set if there is a failure during chainstate initialization.
 // The function therefore has to support re-entry.
 static ChainstateLoadResult InitAndLoadChainstate(
     NodeContext& node,
@@ -1216,7 +1251,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
     };
     Assert(ApplyArgsManOptions(args, blockman_opts)); // no error can happen, already checked in AppInitParameterInteraction
     try {
-        node.chainman = std::make_unique<ChainstateManager>(*Assert(node.shutdown), chainman_opts, blockman_opts);
+        node.chainman = std::make_unique<ChainstateManager>(*Assert(node.shutdown_signal), chainman_opts, blockman_opts);
     } catch (std::exception& e) {
         return {ChainstateLoadStatus::FAILURE_FATAL, strprintf(Untranslated("Failed to initialize ChainstateManager: %s"), e.what())};
     }
@@ -1261,7 +1296,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
             return f();
         } catch (const std::exception& e) {
             LogError("%s\n", e.what());
-            return std::make_tuple(node::ChainstateLoadStatus::FAILURE, _("Error opening block database"));
+            return std::make_tuple(node::ChainstateLoadStatus::FAILURE, _("Error loading databases"));
         }
     };
     auto [status, error] = catch_exceptions([&] { return LoadChainstate(chainman, cache_sizes, options); });
@@ -1327,7 +1362,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         constexpr uint64_t min_disk_space = 50 << 20; // 50 MB
         if (!CheckDiskSpace(args.GetBlocksDirPath(), min_disk_space)) {
             LogError("Shutting down due to lack of disk space!\n");
-            if (!(*Assert(node.shutdown))()) {
+            if (!(Assert(node.shutdown_request))()) {
                 LogError("Failed to send shutdown signal after disk space check\n");
             }
         }
@@ -1475,7 +1510,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             return InitError(strprintf(_("User Agent comment (%s) contains unsafe characters."), cmt));
         uacomments.push_back(cmt);
     }
-    strSubVersion = FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, uacomments);
+    strSubVersion = FormatSubVersion(UA_NAME, CLIENT_VERSION, uacomments);
     if (strSubVersion.size() > MAX_SUBVERSION_LENGTH) {
         return InitError(strprintf(_("Total length of network version string (%i) exceeds maximum length (%i). Reduce the number or size of uacomments."),
             strSubVersion.size(), MAX_SUBVERSION_LENGTH));
@@ -1608,8 +1643,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // ********************************************************* Step 7: load block chain
 
-    node.notifications = std::make_unique<KernelNotifications>(*Assert(node.shutdown), node.exit_status, *Assert(node.warnings));
-    ReadNotificationArgs(args, *node.notifications);
+    node.notifications = std::make_unique<KernelNotifications>(Assert(node.shutdown_request), node.exit_status, *Assert(node.warnings));
+    auto& kernel_notifications{*node.notifications};
+    ReadNotificationArgs(args, kernel_notifications);
 
     // cache size calculations
     CacheSizes cache_sizes = CalculateCacheSizes(args, g_enabled_filter_types.size());
@@ -1641,15 +1677,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (status == ChainstateLoadStatus::FAILURE && !do_reindex && !ShutdownRequested(node)) {
         // suggest a reindex
         bool do_retry = uiInterface.ThreadSafeQuestion(
-            error + Untranslated(".\n\n") + _("Do you want to rebuild the block database now?"),
+            error + Untranslated(".\n\n") + _("Do you want to rebuild the databases now?"),
             error.original + ".\nPlease restart with -reindex or -reindex-chainstate to recover.",
             "", CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT);
         if (!do_retry) {
-            LogError("Aborted block database rebuild. Exiting.\n");
             return false;
         }
         do_reindex = true;
-        if (!Assert(node.shutdown)->reset()) {
+        if (!Assert(node.shutdown_signal)->reset()) {
             LogError("Internal error: failed to reset shutdown signal.\n");
         }
         std::tie(status, error) = InitAndLoadChainstate(
@@ -1665,13 +1700,21 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // As LoadBlockIndex can take several minutes, it's possible the user
     // requested to kill the GUI during the last operation. If so, exit.
-    // As the program has not fully started yet, Shutdown() is possibly overkill.
     if (ShutdownRequested(node)) {
         LogPrintf("Shutdown requested. Exiting.\n");
         return false;
     }
 
     ChainstateManager& chainman = *Assert(node.chainman);
+
+    if (args.IsArgSet("-loadutxosnapshot")) {
+        fs::path snapshot_path = fs::u8path(args.GetArg("-loadutxosnapshot", ""));
+        snapshot_path = AbsPathForConfigVal(args, snapshot_path);
+
+        if (!LoadUTXOSnapshot(node, snapshot_path)) {
+            LogPrintf("Failed to load UTXO snapshot from %s", snapshot_path.utf8string());
+        }
+    }
 
     assert(!node.peerman);
     node.peerman = PeerManager::make(*node.connman, *node.addrman,
@@ -1723,7 +1766,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         // Prior to setting NODE_NETWORK, check if we can provide historical blocks.
         if (!WITH_LOCK(chainman.GetMutex(), return chainman.BackgroundSyncInProgress())) {
             LogPrintf("Setting NODE_NETWORK on non-prune mode\n");
-            nLocalServices = ServiceFlags(nLocalServices | NODE_NETWORK);
+            g_local_services = ServiceFlags(g_local_services | NODE_NETWORK);
         } else {
             LogPrintf("Running node in NODE_NETWORK_LIMITED mode until snapshot background sync completes\n");
         }
@@ -1761,15 +1804,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         }
     }
 
-    // Either install a handler to notify us when genesis activates, or set fHaveGenesis directly.
-    // No locking, as this happens before any background thread is started.
-    boost::signals2::connection block_notify_genesis_wait_connection;
-    if (WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip() == nullptr)) {
-        block_notify_genesis_wait_connection = uiInterface.NotifyBlockTip_connect(std::bind(BlockNotifyGenesisWait, std::placeholders::_2));
-    } else {
-        fHaveGenesis = true;
-    }
-
 #if HAVE_SYSTEM
     const std::string block_notify = args.GetArg("-blocknotify", "");
     if (!block_notify.empty()) {
@@ -1794,7 +1828,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         ImportBlocks(chainman, vImportFiles);
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogPrintf("Stopping after block import\n");
-            if (!(*Assert(node.shutdown))()) {
+            if (!(Assert(node.shutdown_request))()) {
                 LogError("Failed to send shutdown signal after finishing block import\n");
             }
             return;
@@ -1814,34 +1848,32 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     });
 
     // Wait for genesis block to be processed
-    {
-        WAIT_LOCK(g_genesis_wait_mutex, lock);
-        // We previously could hang here if shutdown was requested prior to
-        // ImportBlocks getting started, so instead we just wait on a timer to
-        // check ShutdownRequested() regularly.
-        while (!fHaveGenesis && !ShutdownRequested(node)) {
-            g_genesis_wait_cv.wait_for(lock, std::chrono::milliseconds(500));
-        }
-        block_notify_genesis_wait_connection.disconnect();
+    if (WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip() == nullptr)) {
+        WAIT_LOCK(kernel_notifications.m_tip_block_mutex, lock);
+        kernel_notifications.m_tip_block_cv.wait(lock, [&]() EXCLUSIVE_LOCKS_REQUIRED(kernel_notifications.m_tip_block_mutex) {
+            return !kernel_notifications.m_tip_block.IsNull() || ShutdownRequested(node);
+        });
     }
 
-    if (ShutdownRequested(node)) {
+    // if loadutxosnapshot is set, we want to load the snapshot then shut down so that only
+    // syncing to chaintip is benchmarked
+    if (ShutdownRequested(node) || args.IsArgSet("-loadutxosnapshot")) {
         return false;
     }
 
     // ********************************************************* Step 12: start node
 
-    //// debug print
     int64_t best_block_time{};
     {
-        LOCK(cs_main);
+        LOCK(chainman.GetMutex());
+        const auto& tip{*Assert(chainman.ActiveTip())};
         LogPrintf("block tree size = %u\n", chainman.BlockIndex().size());
-        chain_active_height = chainman.ActiveChain().Height();
-        best_block_time = chainman.ActiveChain().Tip() ? chainman.ActiveChain().Tip()->GetBlockTime() : chainman.GetParams().GenesisBlock().GetBlockTime();
+        chain_active_height = tip.nHeight;
+        best_block_time = tip.GetBlockTime();
         if (tip_info) {
             tip_info->block_height = chain_active_height;
             tip_info->block_time = best_block_time;
-            tip_info->verification_progress = GuessVerificationProgress(chainman.GetParams().TxData(), chainman.ActiveChain().Tip());
+            tip_info->verification_progress = GuessVerificationProgress(chainman.GetParams().TxData(), &tip);
         }
         if (tip_info && chainman.m_best_header) {
             tip_info->header_height = chainman.m_best_header->nHeight;
@@ -1851,11 +1883,11 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     LogPrintf("nBestHeight = %d\n", chain_active_height);
     if (node.peerman) node.peerman->SetBestBlock(chain_active_height, std::chrono::seconds{best_block_time});
 
-    // Map ports with UPnP or NAT-PMP
-    StartMapPort(args.GetBoolArg("-upnp", DEFAULT_UPNP), args.GetBoolArg("-natpmp", DEFAULT_NATPMP));
+    // Map ports with NAT-PMP
+    StartMapPort(args.GetBoolArg("-natpmp", DEFAULT_NATPMP));
 
     CConnman::Options connOptions;
-    connOptions.nLocalServices = nLocalServices;
+    connOptions.m_local_services = g_local_services;
     connOptions.m_max_automatic_connections = nMaxConnections;
     connOptions.uiInterface = &uiInterface;
     connOptions.m_banman = node.banman.get();

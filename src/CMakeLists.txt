@@ -5,7 +5,7 @@
 include(GNUInstallDirs)
 include(AddWindowsResources)
 
-configure_file(${PROJECT_SOURCE_DIR}/cmake/bitcoin-config.h.in config/bitcoin-config.h USE_SOURCE_PERMISSIONS @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/cmake/bitcoin-build-config.h.in bitcoin-build-config.h USE_SOURCE_PERMISSIONS @ONLY)
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_custom_target(generate_build_info
@@ -114,6 +114,8 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   common/init.cpp
   common/interfaces.cpp
   common/messages.cpp
+  common/netif.cpp
+  common/pcp.cpp
   common/run_command.cpp
   common/settings.cpp
   common/signmessage.cpp
@@ -244,6 +246,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/psbt.cpp
   node/timeoffsets.cpp
   node/transaction.cpp
+  node/txdownloadman_impl.cpp
   node/txreconciliation.cpp
   node/utxo_snapshot.cpp
   node/warnings.cpp
@@ -293,7 +296,6 @@ target_link_libraries(bitcoin_node
     Boost::headers
     $<TARGET_NAME_IF_EXISTS:libevent::libevent>
     $<TARGET_NAME_IF_EXISTS:libevent::pthreads>
-    $<TARGET_NAME_IF_EXISTS:MiniUPnPc::MiniUPnPc>
     $<TARGET_NAME_IF_EXISTS:bitcoin_zmq>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
 )

@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <validation.h>
 
@@ -176,17 +176,13 @@ std::optional<std::vector<int>> CalculatePrevHeights(
     std::vector<int> prev_heights;
     prev_heights.resize(tx.vin.size());
     for (size_t i = 0; i < tx.vin.size(); ++i) {
-        const CTxIn& txin = tx.vin[i];
-        Coin coin;
-        if (!coins.GetCoin(txin.prevout, coin)) {
+        if (auto coin{coins.GetCoin(tx.vin[i].prevout)}) {
+            prev_heights[i] = coin->nHeight == MEMPOOL_HEIGHT
+                              ? tip.nHeight + 1 // Assume all mempool transaction confirm in the next block.
+                              : coin->nHeight;
+        } else {
             LogPrintf("ERROR: %s: Missing input %d in transaction \'%s\'\n", __func__, i, tx.GetHash().GetHex());
             return std::nullopt;
-        }
-        if (coin.nHeight == MEMPOOL_HEIGHT) {
-            // Assume all mempool transaction confirm in the next block.
-            prev_heights[i] = tip.nHeight + 1;
-        } else {
-            prev_heights[i] = coin.nHeight;
         }
     }
     return prev_heights;
@@ -1972,6 +1968,8 @@ void Chainstate::InitCoinsDB(
             .obfuscate = true,
             .options = m_chainman.m_options.coins_db},
         m_chainman.m_options.coins_view);
+
+    m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
 
 void Chainstate::InitCoinsCache(size_t cache_size_bytes)
@@ -2179,6 +2177,8 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         if (pvChecks) {
             pvChecks->emplace_back(std::move(check));
         } else if (!check()) {
+            ScriptError error{check.GetScriptError()};
+
             if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
                 // Check whether the failure was caused by a
                 // non-mandatory script verification check, such as
@@ -2192,6 +2192,14 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                         flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheSigStore, &txdata);
                 if (check2())
                     return state.Invalid(TxValidationResult::TX_NOT_STANDARD, strprintf("non-mandatory-script-verify-flag (%s)", ScriptErrorString(check.GetScriptError())));
+
+                // If the second check failed, it failed due to a mandatory script verification
+                // flag, but the first check might have failed on a non-mandatory script
+                // verification flag.
+                //
+                // Avoid reporting a mandatory script check failure with a non-mandatory error
+                // string by reporting the error from the second check.
+                error = check2.GetScriptError();
             }
             // MANDATORY flag failures correspond to
             // TxValidationResult::TX_CONSENSUS. Because CONSENSUS
@@ -2202,7 +2210,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
             // support, to avoid splitting the network (but this
             // depends on the details of how net_processing handles
             // such errors).
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(error)));
         }
     }
 
@@ -2736,7 +2744,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         block.vtx.size(),
         nInputs,
         nSigOpsCost,
-        time_5 - time_start // in microseconds (µs)
+        Ticks<std::chrono::nanoseconds>(time_5 - time_start)
     );
 
     return true;
@@ -3447,7 +3455,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     // chainstate past the snapshot base block.
     if (WITH_LOCK(::cs_main, return m_disabled)) {
         LogPrintf("m_disabled is set - this chainstate should not be in operation. "
-            "Please report this as a bug. %s\n", PACKAGE_BUGREPORT);
+            "Please report this as a bug. %s\n", CLIENT_BUGREPORT);
         return false;
     }
 
@@ -3533,7 +3541,6 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                     m_chainman.m_options.signals->UpdatedBlockTip(pindexNewTip, pindexFork, still_in_ibd);
                 }
 
-                // Always notify the UI if a new block tip was connected
                 if (kernel::IsInterrupted(m_chainman.GetNotifications().blockTip(GetSynchronizationState(still_in_ibd, m_chainman.m_blockman.m_blockfiles_indexed), *pindexNewTip))) {
                     // Just breaking and returning success for now. This could
                     // be changed to bubble up the kernel::Interrupted value to
@@ -3847,7 +3854,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
     if (!Assume(pindexNew->m_chain_tx_count == 0 || pindexNew->m_chain_tx_count == prev_tx_sum(*pindexNew) ||
                 pindexNew == GetSnapshotBaseBlock())) {
         LogWarning("Internal bug detected: block %d has unexpected m_chain_tx_count %i that should be %i (%s %s). Please report this issue here: %s\n",
-            pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), PACKAGE_NAME, FormatFullVersion(), PACKAGE_BUGREPORT);
+            pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         pindexNew->m_chain_tx_count = 0;
     }
     pindexNew->nFile = pos.nFile;
@@ -3875,7 +3882,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             // incorrect hardcoded AssumeutxoData::m_chain_tx_count value.
             if (!Assume(pindex->m_chain_tx_count == 0 || pindex->m_chain_tx_count == prev_tx_sum(*pindex))) {
                 LogWarning("Internal bug detected: block %d has unexpected m_chain_tx_count %i that should be %i (%s %s). Please report this issue here: %s\n",
-                   pindex->nHeight, pindex->m_chain_tx_count, prev_tx_sum(*pindex), PACKAGE_NAME, FormatFullVersion(), PACKAGE_BUGREPORT);
+                   pindex->nHeight, pindex->m_chain_tx_count, prev_tx_sum(*pindex), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
             pindex->nSequenceId = nBlockSequenceId++;
@@ -5559,7 +5566,7 @@ double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex *pin
 
     if (!Assume(pindex->m_chain_tx_count > 0)) {
         LogWarning("Internal bug detected: block %d has unset m_chain_tx_count (%s %s). Please report this issue here: %s\n",
-                   pindex->nHeight, PACKAGE_NAME, FormatFullVersion(), PACKAGE_BUGREPORT);
+                   pindex->nHeight, CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         return 0.0;
     }
 
@@ -6078,7 +6085,7 @@ SnapshotCompletionResult ChainstateManager::MaybeCompleteSnapshotValidation()
             "Please report this incident to %s, including how you obtained the snapshot. "
             "The invalid snapshot chainstate will be left on disk in case it is "
             "helpful in diagnosing the issue that caused this error."),
-            PACKAGE_NAME, snapshot_tip_height, snapshot_base_height, snapshot_base_height, PACKAGE_BUGREPORT
+            CLIENT_NAME, snapshot_tip_height, snapshot_base_height, snapshot_base_height, CLIENT_BUGREPORT
         );
 
         LogError("[snapshot] !!! %s\n", user_error.original);
@@ -6385,6 +6392,12 @@ std::optional<int> ChainstateManager::GetSnapshotBaseHeight() const
 {
     const CBlockIndex* base = this->GetSnapshotBaseBlock();
     return base ? std::make_optional(base->nHeight) : std::nullopt;
+}
+
+bool ChainstateManager::BackgroundSyncInProgress() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) {
+    if (!IsUsable(m_snapshot_chainstate.get())) return false;
+    if (!IsUsable(m_ibd_chainstate.get())) return false;
+    return !m_options.pause_background_sync;
 }
 
 bool ChainstateManager::ValidatedSnapshotCleanup()

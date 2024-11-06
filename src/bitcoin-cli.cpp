@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <chainparamsbase.h>
 #include <clientversion.h>
@@ -145,14 +145,14 @@ static int AppInitRPC(int argc, char* argv[])
         return EXIT_FAILURE;
     }
     if (argc < 2 || HelpRequested(gArgs) || gArgs.IsArgSet("-version")) {
-        std::string strUsage = PACKAGE_NAME " RPC client version " + FormatFullVersion() + "\n";
+        std::string strUsage = CLIENT_NAME " RPC client version " + FormatFullVersion() + "\n";
 
         if (gArgs.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo());
         } else {
             strUsage += "\n"
-                "Usage:  bitcoin-cli [options] <command> [params]  Send command to " PACKAGE_NAME "\n"
-                "or:     bitcoin-cli [options] -named <command> [name=value]...  Send command to " PACKAGE_NAME " (with named arguments)\n"
+                "Usage:  bitcoin-cli [options] <command> [params]  Send command to " CLIENT_NAME "\n"
+                "or:     bitcoin-cli [options] -named <command> [name=value]...  Send command to " CLIENT_NAME " (with named arguments)\n"
                 "or:     bitcoin-cli [options] help                List commands\n"
                 "or:     bitcoin-cli [options] help <command>      Get help for a command\n";
             strUsage += "\n" + gArgs.GetHelpMessage();
@@ -535,7 +535,7 @@ public:
         }
 
         // Generate report header.
-        std::string result{strprintf("%s client %s%s - server %i%s\n\n", PACKAGE_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].getInt<int>(), networkinfo["subversion"].get_str())};
+        std::string result{strprintf("%s client %s%s - server %i%s\n\n", CLIENT_NAME, FormatFullVersion(), ChainToString(), networkinfo["protocolversion"].getInt<int>(), networkinfo["subversion"].get_str())};
 
         // Report detailed peer connections list sorted by direction and minimum ping time.
         if (DetailsRequested() && !m_peers.empty()) {
@@ -678,7 +678,7 @@ public:
         "           \".\" - we do not relay addresses to this peer (addr_relay_enabled is false)\n"
         "  addrl    Total number of addresses dropped due to rate limiting\n"
         "  age      Duration of connection to the peer, in minutes\n"
-        "  asmap    Mapped AS (Autonomous System) number in the BGP route to the peer, used for diversifying\n"
+        "  asmap    Mapped AS (Autonomous System) number at the end of the BGP route to the peer, used for diversifying\n"
         "           peer selection (only displayed if the -asmap config option is set)\n"
         "  id       Peer index, in increasing order of peer connections since node startup\n"
         "  address  IP address and port of the peer\n"

@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <chainparams.h>
 #include <clientversion.h>
@@ -136,12 +136,12 @@ static bool ProcessInitCommands(ArgsManager& args)
 {
     // Process help and version before taking care about datadir
     if (HelpRequested(args) || args.IsArgSet("-version")) {
-        std::string strUsage = PACKAGE_NAME " version " + FormatFullVersion() + "\n";
+        std::string strUsage = CLIENT_NAME " version " + FormatFullVersion() + "\n";
 
         if (args.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo());
         } else {
-            strUsage += "\nUsage:  bitcoind [options]                     Start " PACKAGE_NAME "\n"
+            strUsage += "\nUsage:  bitcoind [options]                     Start " CLIENT_NAME "\n"
                 "\n";
             strUsage += args.GetHelpMessage();
         }
@@ -195,7 +195,7 @@ static bool AppInit(NodeContext& node)
 
         if (args.GetBoolArg("-daemon", DEFAULT_DAEMON) || args.GetBoolArg("-daemonwait", DEFAULT_DAEMONWAIT)) {
 #if HAVE_DECL_FORK
-            tfm::format(std::cout, PACKAGE_NAME " starting\n");
+            tfm::format(std::cout, CLIENT_NAME " starting\n");
 
             // Daemonize
             switch (fork_daemon(1, 0, daemon_ep)) { // don't chdir (1), do close FDs (0)
@@ -274,7 +274,7 @@ MAIN_FUNCTION
     if (ProcessInitCommands(args)) return EXIT_SUCCESS;
 
     // Start application
-    if (!AppInit(node) || !Assert(node.shutdown)->wait()) {
+    if (!AppInit(node) || !Assert(node.shutdown_signal)->wait()) {
         node.exit_status = EXIT_FAILURE;
     }
     Interrupt(node);

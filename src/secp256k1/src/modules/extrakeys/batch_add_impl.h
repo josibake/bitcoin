@@ -1,9 +1,9 @@
 #ifndef SECP256K1_MODULE_EXTRAKEYS_BATCH_ADD_IMPL_H
 #define SECP256K1_MODULE_EXTRAKEYS_BATCH_ADD_IMPL_H
 
-#include "include/secp256k1_extrakeys.h"
-#include "include/secp256k1_tweak_check_batch.h"
-#include "src/modules/batch/main_impl.h"
+#include "../../../include/secp256k1_extrakeys.h"
+#include "../../../include/secp256k1_tweak_check_batch.h"
+#include "../batch/main_impl.h"
 
 /* The number of scalar-point pairs allocated on the scratch space
  * by `secp256k1_batch_add_xonlypub_tweak_check` */

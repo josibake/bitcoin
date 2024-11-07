@@ -7,7 +7,7 @@ project(libsecp256k1
   # The package (a.k.a. release) version is based on semantic versioning 2.0.0 of
   # the API. All changes in experimental modules are treated as
   # backwards-compatible and therefore at most increase the minor version.
-  VERSION 0.6.0
+  VERSION 0.6.1
   DESCRIPTION "Optimized C library for ECDSA signatures and secret/public key operations on curve secp256k1."
   HOMEPAGE_URL "https://github.com/bitcoin-core/secp256k1"
   LANGUAGES C
@@ -32,7 +32,7 @@ endif()
 # All changes in experimental modules are treated as if they don't affect the
 # interface and therefore only increase the revision.
 set(${PROJECT_NAME}_LIB_VERSION_CURRENT 5)
-set(${PROJECT_NAME}_LIB_VERSION_REVISION 0)
+set(${PROJECT_NAME}_LIB_VERSION_REVISION 1)
 set(${PROJECT_NAME}_LIB_VERSION_AGE 0)
 
 #=============================
@@ -55,13 +55,13 @@ option(SECP256K1_INSTALL "Enable installation." ${PROJECT_IS_TOP_LEVEL})
 ## Modules
 
 # We declare all options before processing them, to make sure we can express
-# dependendencies while processing.
+# dependencies while processing.
 option(SECP256K1_ENABLE_MODULE_ECDH "Enable ECDH module." ON)
 option(SECP256K1_ENABLE_MODULE_RECOVERY "Enable ECDSA pubkey recovery module." OFF)
 option(SECP256K1_ENABLE_MODULE_EXTRAKEYS "Enable extrakeys module." ON)
 option(SECP256K1_ENABLE_MODULE_SCHNORRSIG "Enable schnorrsig module." ON)
 option(SECP256K1_ENABLE_MODULE_MUSIG "Enable musig module." ON)
-option(SECP256K1_ENABLE_MODULE_ELLSWIFT "Enable ElligatorSwift module." ON)
+option(SECP256K1_ENABLE_MODULE_ELLSWIFT "Enable ElligatorSwift module." OFF)
 
 # Processing must be done in a topological sorting of the dependency graph
 # (dependent module first).
@@ -156,11 +156,20 @@ elseif(SECP256K1_ASM)
   endif()
 endif()
 
-option(SECP256K1_EXPERIMENTAL "Allow experimental configuration options." OFF)
+option(SECP256K1_EXPERIMENTAL "Allow experimental configuration options." ON)
 if(NOT SECP256K1_EXPERIMENTAL)
   if(SECP256K1_ASM STREQUAL "arm32")
     message(FATAL_ERROR "ARM32 assembly is experimental. Use -DSECP256K1_EXPERIMENTAL=ON to allow.")
   endif()
+endif()
+
+option(SECP256K1_ENABLE_MODULE_BATCH "Enable batch verification module." ON)
+if(SECP256K1_ENABLE_MODULE_BATCH)
+  if(DEFINED SECP256K1_EXPERIMENTAL AND NOT SECP256K1_EXPERIMENTAL)
+    message(FATAL_ERROR "Batch verification module is experimental")
+  endif()
+  set(SECP256K1_ENABLE_MODULE_BATCH ON)
+  add_compile_definitions(ENABLE_MODULE_BATCH=1)
 endif()
 
 set(SECP256K1_VALGRIND "AUTO" CACHE STRING "Build with extra checks for running inside Valgrind. [default=AUTO]")
@@ -327,6 +336,7 @@ message("  extrakeys ........................... ${SECP256K1_ENABLE_MODULE_EXTRA
 message("  schnorrsig .......................... ${SECP256K1_ENABLE_MODULE_SCHNORRSIG}")
 message("  musig ............................... ${SECP256K1_ENABLE_MODULE_MUSIG}")
 message("  ElligatorSwift ...................... ${SECP256K1_ENABLE_MODULE_ELLSWIFT}")
+message("  Batch ............................... ${SECP256K1_ENABLE_MODULE_BATCH}")
 message("Parameters:")
 message("  ecmult window size .................. ${SECP256K1_ECMULT_WINDOW_SIZE}")
 message("  ecmult gen table size ............... ${SECP256K1_ECMULT_GEN_KB} KiB")

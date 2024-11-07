@@ -1,7 +1,7 @@
 #ifndef SECP256K1_MODULE_BATCH_MAIN_H
 #define SECP256K1_MODULE_BATCH_MAIN_H
 
-#include "include/secp256k1_batch.h"
+#include "../../../include/secp256k1_batch.h"
 
 /* Maximum number of scalar-point pairs on the batch
  * for which `secp256k1_batch_verify` remains efficient */

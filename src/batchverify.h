@@ -8,11 +8,10 @@
 #include <pubkey.h>
 #include <sync.h>
 
-#include <secp256k1_batch.h>
-
+class Batch;
 class BatchSchnorrVerifier {
 private:
-    secp256k1_batch* m_batch GUARDED_BY(m_batch_mutex);
+    Batch* m_batch GUARDED_BY(m_batch_mutex);
     mutable Mutex m_batch_mutex;
 
 public:

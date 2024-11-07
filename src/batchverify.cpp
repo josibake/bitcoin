@@ -12,6 +12,14 @@
 #include <secp256k1_batch.h>
 #include <secp256k1_schnorrsig_batch.h>
 
+class Batch {
+private:
+    secp256k1_batch* m_batch;
+public:
+    Batch(secp256k1_batch* batch) : m_batch(batch) {}
+    secp256k1_batch* get() const { return m_batch; }
+};
+
 BatchSchnorrVerifier::BatchSchnorrVerifier() {
     unsigned char rnd[16];
     GetRandBytes(rnd);
@@ -20,26 +28,29 @@ BatchSchnorrVerifier::BatchSchnorrVerifier() {
     // still efficient.
     const size_t max_batch_size{106};
     secp256k1_batch* batch{secp256k1_batch_create(secp256k1_context_static, max_batch_size, rnd)};
-    m_batch = batch;
+    m_batch = new Batch(batch);
 }
 
 BatchSchnorrVerifier::~BatchSchnorrVerifier() {
-    (void)secp256k1_batch_destroy(secp256k1_context_static, m_batch);
+    if (m_batch) {
+        (void)secp256k1_batch_destroy(secp256k1_context_static, m_batch->get());
+        delete m_batch;
+    }
 }
 
 bool BatchSchnorrVerifier::Add(const Span<const unsigned char> sig, const XOnlyPubKey& pubkey, const uint256& sighash) {
     LOCK(m_batch_mutex);
-    if (secp256k1_batch_usable(secp256k1_context_static, m_batch) == 0) {
+    if (secp256k1_batch_usable(secp256k1_context_static, m_batch->get()) == 0) {
         LogPrintf("ERROR: BatchSchnorrVerifier m_batch unusable\n");
         return false;
     }
 
     secp256k1_xonly_pubkey pubkey_parsed;
     if (!secp256k1_xonly_pubkey_parse(secp256k1_context_static, &pubkey_parsed, pubkey.data())) return false;
-    return secp256k1_batch_add_schnorrsig(secp256k1_context_static, m_batch, sig.data(), sighash.begin(), 32, &pubkey_parsed);
+    return secp256k1_batch_add_schnorrsig(secp256k1_context_static, m_batch->get(), sig.data(), sighash.begin(), 32, &pubkey_parsed);
 }
 
 bool BatchSchnorrVerifier::Verify() {
     LOCK(m_batch_mutex);
-    return secp256k1_batch_verify(secp256k1_context_static, m_batch);
+    return secp256k1_batch_verify(secp256k1_context_static, m_batch->get());
 }

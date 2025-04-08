@@ -29,7 +29,7 @@ CKeyID SpPubKey::GetID() const
 {
   unsigned char code[BIP352_SPKEY_SIZE];
   Encode(code);
-  return CKeyID(Hash160(Span(code, BIP352_SPKEY_SIZE)));
+  return CKeyID(Hash160(std::span(code, BIP352_SPKEY_SIZE)));
 }
 
 void SpKey::Encode(unsigned char code[BIP352_SPKEY_SIZE]) const

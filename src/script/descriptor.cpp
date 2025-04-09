@@ -1743,50 +1743,52 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t key_exp_i
     if (!ParseKeyPath(split, paths, apostrophe, error, /*allow_multipath=*/true)) return {};
 
     if (ctx == ParseScriptContext::SP_SCAN || ctx == ParseScriptContext::SP_SPEND) {
-        CExtKey derivedKey;
-        CExtPubKey derivedPubKey;
-        for (const auto& p : paths) {
-            derivedKey = extkey;
-            derivedPubKey = extpubkey;
+        for (const auto& path : paths) {
+            CExtKey derivedKey;
+            CExtPubKey derivedPubKey;
+            for (const auto& p : path) {
+                derivedKey = extkey;
+                derivedPubKey = extpubkey;
 
-            if (derivedKey.key.IsValid()) {
-                if (!derivedKey.Derive(derivedKey, p.at(0))) {
-                    error = "Failed to derive key";
-                    return {};
+                if (derivedKey.key.IsValid()) {
+                    if (!derivedKey.Derive(derivedKey, p)) {
+                        error = "Failed to derive key";
+                        return {};
+                    }
+                }
+                if (derivedPubKey.pubkey.IsValid()) {
+                    if (!derivedPubKey.Derive(derivedPubKey, p)) {
+                        error = "Failed to derive key";
+                        return {};
+                    }
                 }
             }
-            if (derivedPubKey.pubkey.IsValid()) {
-                if (!derivedPubKey.Derive(derivedPubKey, p.at(0))) {
-                    error = "Failed to derive key";
+
+            if (ctx == ParseScriptContext::SP_SCAN) {
+                if (!extkey.key.IsValid()) {
+                    error = "Scan key must be a private key or extended private key";
                     return {};
                 }
+    
+                // Derive sp scan key from extkey
+                CKey scan_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
+                ret.emplace_back(std::make_unique<SilentPubkeyProvider>(key_exp_index, SpPubKey(scan_key)));
+                return ret;
+            }
+    
+            if (extkey.key.IsValid()) {
+                // Derive sp spend key from extkey
+                CKey spend_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
+                out.keys.emplace(spend_key.GetPubKey().GetID(), spend_key);
+                ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, spend_key.GetPubKey(), false));
+            }
+            if (extpubkey.pubkey.IsValid()) {
+                // Derive sp spend key from extpubkey
+                CPubKey spend_key = derivedPubKey.pubkey.IsValid() ? derivedPubKey.pubkey : extpubkey.pubkey;
+                ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, spend_key, false));
             }
         }
-
-        if (ctx == ParseScriptContext::SP_SCAN) {
-            if (!extkey.key.IsValid()) {
-                error = "Scan key must be a private key or extended private key";
-                return {};
-            }
-
-            // Derive sp scan key from extkey
-            CKey scan_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
-            ret.emplace_back(std::make_unique<SilentPubkeyProvider>(key_exp_index, SpPubKey(scan_key)));
-            return ret;
-        }
-
-        if (extkey.key.IsValid()) {
-            // Derive sp spend key from extkey
-            CKey spend_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
-            out.keys.emplace(spend_key.GetPubKey().GetID(), spend_key);
-            ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, spend_key.GetPubKey(), false));
-        }
-        if (extpubkey.pubkey.IsValid()) {
-            // Derive sp spend key from extpubkey
-            CPubKey spend_key = derivedPubKey.pubkey.IsValid() ? derivedPubKey.pubkey : extpubkey.pubkey;
-            ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, spend_key, false));
-            return ret;
-        }
+        return ret;
     }
 
     if (extkey.key.IsValid()) {
@@ -1995,41 +1997,47 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
     if (ctx == ParseScriptContext::TOP && Func("sp", expr)) {
         auto arg1 = Expr(expr);
         if (!Const(",", expr)) {
-            auto sppKey = ParsePubkey(key_exp_index, arg1, ParseScriptContext::SP_ONLY, out, error);
-            if (!sppKey.at(0)) {
+            auto sppKeys = ParsePubkey(key_exp_index, arg1, ParseScriptContext::SP_ONLY, out, error);
+            if (sppKeys.empty()) {
                 error = strprintf("sp(): %s", error);
                 return {};
             }
             ++key_exp_index;
-            ret.emplace_back(std::make_unique<SpDescriptor>(std::move(sppKey.at(0))));
+            for (auto& sppkey : sppKeys) {
+                ret.emplace_back(std::make_unique<SpDescriptor>(std::move(sppkey)));
+            }
             return ret;
         }
         auto arg2 = Expr(expr);
 
-        auto scanKey = ParsePubkey(key_exp_index, arg1, ParseScriptContext::SP_SCAN, out, error);
-        if (!scanKey.at(0)) {
+        auto scanKeys = ParsePubkey(key_exp_index, arg1, ParseScriptContext::SP_SCAN, out, error);
+        if (scanKeys.empty()) {
             error = strprintf("sp(): %s", error);
             return {};
         }
         ++key_exp_index;
 
-        auto spendKey = ParsePubkey(key_exp_index, arg2, ParseScriptContext::SP_SPEND, out, error);
-        if (!spendKey.at(0)) {
+        auto spendKeys = ParsePubkey(key_exp_index, arg2, ParseScriptContext::SP_SPEND, out, error);
+        if (spendKeys.empty()) {
             error = strprintf("sp(): %s", error);
             return {};
         }
-        auto spendPubKey = spendKey.at(0)->GetRootPubKey();
-        if (!spendPubKey.has_value()) {
-            error = "sp(): could not get spend pubkey";
-            return {};
+
+        for (auto& scanKey : scanKeys) {
+            for (auto& spendKey : spendKeys) {
+                auto spendPubKey = spendKey->GetRootPubKey();
+                if (!spendPubKey.has_value()) {
+                    error = "sp(): could not get spend pubkey";
+                    return {};
+                }       
+                SilentPubkeyProvider* sppubKey = dynamic_cast<SilentPubkeyProvider*>(scanKey.get());
+                assert(sppubKey != nullptr);
+                sppubKey->SetSpendPubKey(*spendPubKey);
+                ret.emplace_back(std::make_unique<SpDescriptor>(std::move(scanKey)));
+            }
         }
 
-        SilentPubkeyProvider* sppubKey = dynamic_cast<SilentPubkeyProvider*>(scanKey.at(0).get());
-        assert(sppubKey != nullptr);
-        sppubKey->SetSpendPubKey(*spendPubKey);
-
         ++key_exp_index;
-        ret.emplace_back(std::make_unique<SpDescriptor>(std::move(scanKey.at(0))));
         return ret;
     } else if (Func("sp", expr)) {
         error = "Can only have sp() at top level";

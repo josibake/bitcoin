@@ -18,7 +18,6 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
-        self.skip_if_no_sqlite()
 
     def test_encrypt_and_decrypt(self):
         self.log.info("Check that a silent payments wallet can be encrypted and decrypted")

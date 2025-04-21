@@ -334,7 +334,7 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         if is_taproot:
             actual_sig_count = len(psbtin["taproot_script_path_sigs"])
         elif is_silent_payments:
-            actual_sig_count = 1
+            actual_sig_count = 1 if "taproot_key_path_sig" in psbtin else 0
         else:
             actual_sig_count = len(psbtin["partial_signatures"])
         assert actual_sig_count == sigs_count

@@ -1716,8 +1716,6 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t key_exp_i
         }
 
         if (sppubkey.IsValid()) {
-            // TODO: should this be commented out?
-            out.keys.emplace(sppubkey.scanKey.GetPubKey().GetID(), sppubkey.scanKey);
             ret.emplace_back(std::make_unique<SilentPubkeyProvider>(key_exp_index, sppubkey));
             return ret;
         }
@@ -1769,15 +1767,15 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t key_exp_i
                     error = "Scan key must be a private key or extended private key";
                     return {};
                 }
-    
-                // Derive sp scan key from extkey
+
                 CKey scan_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
-                ret.emplace_back(std::make_unique<SilentPubkeyProvider>(key_exp_index, SpPubKey(scan_key)));
-                return ret;
+                CPubKey scan_pubkey{scan_key.GetPubKey()};
+                out.keys.emplace(scan_pubkey.GetID(), scan_key);
+                ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, scan_pubkey, false));
+                continue;
             }
     
             if (extkey.key.IsValid()) {
-                // Derive sp spend key from extkey
                 CKey spend_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
                 out.keys.emplace(spend_key.GetPubKey().GetID(), spend_key);
                 ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, spend_key.GetPubKey(), false));
@@ -2024,16 +2022,34 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
         }
 
         for (auto& scanKey : scanKeys) {
+            auto scanPubKey = scanKey->GetRootPubKey();
+            auto scanPubKeyId = scanPubKey->GetID();
+            auto it = out.keys.find(scanPubKeyId);
+            bool clearScanKey{true};
+
+            if (it == out.keys.end()) {
+                error = "sp(): requires the scan priv key";
+                return {};
+            }
+
             for (auto& spendKey : spendKeys) {
                 auto spendPubKey = spendKey->GetRootPubKey();
                 if (!spendPubKey.has_value()) {
                     error = "sp(): could not get spend pubkey";
                     return {};
-                }       
-                SilentPubkeyProvider* sppubKey = dynamic_cast<SilentPubkeyProvider*>(scanKey.get());
-                assert(sppubKey != nullptr);
-                sppubKey->SetSpendPubKey(*spendPubKey);
-                ret.emplace_back(std::make_unique<SpDescriptor>(std::move(scanKey)));
+                }
+                if (spendPubKey->GetID() == scanPubKeyId) {
+                    clearScanKey = false;
+                }
+                auto sppKey = std::make_unique<SilentPubkeyProvider>(key_exp_index, SpPubKey(it->second, *spendPubKey));
+                ret.emplace_back(std::make_unique<SpDescriptor>(std::move(sppKey)));
+            }
+
+            if (clearScanKey) {
+                // scan private key is saved in descriptor string
+                // so remove it allow importation of sp descriptors into
+                // watch-only wallets
+                out.keys.erase(scanPubKey->GetID());
             }
         }
 

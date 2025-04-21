@@ -245,6 +245,10 @@ static UniValue DeriveAddresses(const Descriptor* desc, int64_t range_begin, int
 
             addresses.push_back(EncodeDestination(dest));
         }
+
+        for (const auto& sppubkey_pair: provider.sppubkeys) {
+            addresses.push_back(EncodeDestination(V0SilentPaymentDestination(sppubkey_pair.second)));
+        }
     }
 
     // This should not be possible, but an assert seems overkill:
@@ -328,9 +332,6 @@ static RPCHelpMan deriveaddresses()
 
             if (descs.size() == 1) {
                 return addresses;
-            }
-            for (const auto& sppubkey_pair: key_provider.sppubkeys) {
-                addresses.push_back(EncodeDestination(V0SilentPaymentDestination(sppubkey_pair.second)));
             }
 
             UniValue ret(UniValue::VARR);

@@ -619,7 +619,7 @@ private:
     // Cached FlatSigningProviders to avoid regenerating them each time they are needed.
     mutable std::map<int32_t, FlatSigningProvider> m_map_signing_providers;
     // Fetch the SigningProvider for the given script and optionally include private keys
-    std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CScript& script, bool include_private = false) const;
+    virtual std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CScript& script, bool include_private = false) const;
     // Fetch the SigningProvider for a given index and optionally include private keys. Called by the above functions.
     std::unique_ptr<FlatSigningProvider> GetSigningProvider(int32_t index, bool include_private = false) const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
@@ -724,7 +724,7 @@ private:
     TweakMap m_map_spk_tweaks GUARDED_BY(cs_desc_man);
     LabelTweakMap m_map_label_tweaks GUARDED_BY(cs_desc_man);
 
-    std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CScript& script, bool include_private = false) const;
+    std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CScript& script, bool include_private = false) const override;
 
 protected:
     using DescriptorScriptPubKeyMan::TopUpWithDB; // Make both TopUp methods available

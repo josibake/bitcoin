@@ -109,6 +109,29 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         assert_equal(wallet.getbalance(), 0)
 
+    def test_wallet_persistence(self):
+        self.log.info("Test silent payments wallet persistence after closing and reopening")
+
+        self.nodes[0].createwallet(wallet_name="persistence_test", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("persistence_test")
+        addr = wallet.getnewaddress(address_type="silent-payments")
+        send_amount = 15
+        txid = self.def_wallet.sendtoaddress(addr, send_amount)
+        self.generate(self.nodes[0], 1)
+
+        # verify the wallet received the correct amount
+        assert_equal(wallet.getbalance(), send_amount)
+        wallet.gettransaction(txid)
+        self.nodes[0].unloadwallet("persistence_test")
+
+        # reopen the wallet - currently failing at this step
+        self.nodes[0].loadwallet("persistence_test")
+        wallet = self.nodes[0].get_wallet_rpc("persistence_test")
+        assert_equal(wallet.getbalance(), send_amount)
+        wallet.gettransaction(txid)
+
+        self.log.info("Wallet persistence verified successfully")
+
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 101)
@@ -117,6 +140,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_encrypt_and_decrypt()
         self.test_encrypting_unencrypted()
         self.test_basic()
+        self.test_wallet_persistence()
 
 
 if __name__ == '__main__':

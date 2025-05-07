@@ -121,14 +121,15 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         # verify the wallet received the correct amount
         assert_equal(wallet.getbalance(), send_amount)
-        wallet.gettransaction(txid)
+        tx = wallet.gettransaction(txid)
         self.nodes[0].unloadwallet("persistence_test")
 
         # reopen the wallet - currently failing at this step
         self.nodes[0].loadwallet("persistence_test")
         wallet = self.nodes[0].get_wallet_rpc("persistence_test")
         assert_equal(wallet.getbalance(), send_amount)
-        wallet.gettransaction(txid)
+        loaded_tx = wallet.gettransaction(txid)
+        assert_equal(tx, loaded_tx)
 
         self.log.info("Wallet persistence verified successfully")
 

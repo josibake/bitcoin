@@ -183,7 +183,8 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         assert_equal(wallet.getbalance(), 0)
         self.generate(self.nodes[0], 1)
         assert_approx(wallet.getbalance(), 49.99, 0.0001)
-
+        
+        
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 102)
@@ -195,6 +196,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_basic()
         self.test_wallet_persistence()
         self.test_import_rescan()
+
 
 
 if __name__ == '__main__':

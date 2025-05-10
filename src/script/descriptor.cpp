@@ -1770,7 +1770,7 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t key_exp_i
                 ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, scan_pubkey, false));
                 continue;
             }
-    
+
             if (extkey.key.IsValid()) {
                 CKey spend_key = derivedKey.key.IsValid() ? derivedKey.key : extkey.key;
                 out.keys.emplace(spend_key.GetPubKey().GetID(), spend_key);

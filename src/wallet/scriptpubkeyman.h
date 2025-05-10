@@ -655,7 +655,7 @@ public:
     // and is used to expand the descriptor in GetNewDestination. DescriptorScriptPubKeyMan relies
     // more on ephemeral data than LegacyScriptPubKeyMan. For wallets using unhardened derivation
     // (with or without private keys), the "keypool" is a single xpub.
-    bool TopUp(unsigned int size = 0) override;
+    virtual bool TopUp(unsigned int size = 0) override;
 
     std::vector<WalletDestination> MarkUnusedAddresses(const CScript& script) override;
 
@@ -745,7 +745,8 @@ public:
     isminetype IsMine(const CScript& script) const override;
     isminetype IsMine(std::vector<XOnlyPubKey> output_keys, bip352::PublicData& public_data);
 
-    using DescriptorScriptPubKeyMan::TopUp; // Make both TopUp methods available
+    bool TopUp(unsigned int size = 0) override;
+
     // Adds a tweak to m_map_spk_tweaks and writes to DB
     bool TopUp(const uint256& tweak);
 

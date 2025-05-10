@@ -651,10 +651,6 @@ public:
     {
         return std::make_unique<SilentPubkeyProvider>(m_expr_index, m_sppk);
     }
-    void SetSpendPubKey(const CPubKey pubkey)
-    {
-        m_sppk.spendKey = pubkey;
-    }
 };
 
 /** Base class for all Descriptor implementations. */

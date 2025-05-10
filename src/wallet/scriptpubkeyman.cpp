@@ -3010,6 +3010,7 @@ util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetReserved
 
 bool SilentPaymentDescriptorScriptPubKeyMan::TopUp(unsigned int size)
 {
+    LOCK(cs_desc_man);
     std::set<CScript> spks;
     for (auto it = m_map_spk_tweaks.begin(); it != m_map_spk_tweaks.end(); ++it) {
         spks.insert(it->first);

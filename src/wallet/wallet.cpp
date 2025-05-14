@@ -3655,12 +3655,15 @@ std::set<ScriptPubKeyMan*> CWallet::GetAllScriptPubKeyMans() const
 
 ScriptPubKeyMan* CWallet::GetScriptPubKeyMan(const OutputType& type, bool internal) const
 {
-    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
-    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
-    if (it == spk_managers.end()) {
+    if (type == OutputType::SILENT_PAYMENT && internal) {
         return nullptr;
     }
-    return it->second;
+    const std::map<OutputType, ScriptPubKeyMan*>& spk_managers = internal ? m_internal_spk_managers : m_external_spk_managers;
+    std::map<OutputType, ScriptPubKeyMan*>::const_iterator it = spk_managers.find(type);
+    if (it != spk_managers.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 std::set<ScriptPubKeyMan*> CWallet::GetScriptPubKeyMans(const CScript& script) const
@@ -3820,6 +3823,8 @@ DescriptorScriptPubKeyMan& CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, Wa
     DescriptorScriptPubKeyMan* spk_manager;
     if (IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
         spk_manager = new ExternalSignerScriptPubKeyMan(*this, desc, m_keypool_size);
+    } else if (desc.descriptor->GetOutputType() == OutputType::SILENT_PAYMENT) {
+        spk_manager = new SilentPaymentDescriptorScriptPubKeyMan(*this, desc);
     } else {
         spk_manager = new DescriptorScriptPubKeyMan(*this, desc, m_keypool_size);
     }

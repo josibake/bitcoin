@@ -3008,6 +3008,17 @@ util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetReserved
     return CTxDestination{op_dest};
 }
 
+bool SilentPaymentDescriptorScriptPubKeyMan::TopUp(unsigned int size)
+{
+    LOCK(cs_desc_man);
+    std::set<CScript> spks;
+    for (auto it = m_map_spk_tweaks.begin(); it != m_map_spk_tweaks.end(); ++it) {
+        spks.insert(it->first);
+    }
+    m_storage.TopUpCallback(spks, this);
+    return true;
+}
+
 bool SilentPaymentDescriptorScriptPubKeyMan::TopUp(const uint256& tweak)
 {
     WalletBatch batch(m_storage.GetDatabase());

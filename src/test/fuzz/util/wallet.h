@@ -28,6 +28,7 @@ struct FuzzedWallet {
         {
             LOCK(wallet->cs_wallet);
             wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+            wallet->SetWalletFlag(WALLET_FLAG_SILENT_PAYMENTS);
             auto height{*Assert(chain.getHeight())};
             wallet->SetLastBlockProcessed(height, chain.getBlockHash(height));
         }
@@ -42,6 +43,7 @@ struct FuzzedWallet {
             "sh(wpkh(%s/%s/*))",
             "tr(%s/%s/*)",
             "wpkh(%s/%s/*)",
+            "sp(%s/%s)",
         };
 
         for (const std::string& desc_fmt : DESCS) {

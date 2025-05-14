@@ -24,7 +24,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.log.info("Create encrypted wallet")
         self.nodes[0].createwallet(wallet_name="sp_encrypted", passphrase="unsigned integer", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp_encrypted")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
         self.log.info("Check that we can scan without the wallet being unlocked")
@@ -42,7 +42,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.log.info("Create un-encrypted wallet")
         self.nodes[0].createwallet(wallet_name="sp_unencrypted", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp_unencrypted")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
         assert_equal(wallet.getbalance(), 10)
@@ -61,19 +61,19 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         self.nodes[0].createwallet(wallet_name="sp", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("sp")
-        addr = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
         assert addr.startswith("sp")
 
         self.nodes[0].createwallet(wallet_name="non_sp", silent_payment=False)
         wallet = self.nodes[0].get_wallet_rpc("non_sp")
-        assert_raises_rpc_error(-12, "Error: No silent-payment addresses available", wallet.getnewaddress, address_type="silent-payment")
+        assert_raises_rpc_error(-12, "Error: No silent-payments addresses available", wallet.getnewaddress, address_type="silent-payments")
 
         if self.is_bdb_compiled():
             assert_raises_rpc_error(-4, "Wallet with silent payments must also be a descriptor wallet", self.nodes[0].createwallet, wallet_name="legacy_sp", descriptors=False, silent_payment=True)
 
             self.nodes[0].createwallet(wallet_name="legacy_sp", descriptors=False)
             wallet = self.nodes[0].get_wallet_rpc("legacy_sp")
-            assert_raises_rpc_error(-12, "Error: No silent-payment addresses available", wallet.getnewaddress, address_type="silent-payment")
+            assert_raises_rpc_error(-12, "Error: No silent-payments addresses available", wallet.getnewaddress, address_type="silent-payments")
 
     def test_basic(self):
         self.log.info("Basic receive and send")
@@ -81,8 +81,8 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.nodes[0].createwallet(wallet_name="basic", silent_payment=True)
         wallet = self.nodes[0].get_wallet_rpc("basic")
 
-        addr = wallet.getnewaddress(address_type="silent-payment")
-        addr_again = wallet.getnewaddress(address_type="silent-payment")
+        addr = wallet.getnewaddress(address_type="silent-payments")
+        addr_again = wallet.getnewaddress(address_type="silent-payments")
         assert addr == addr_again
         txid = self.def_wallet.sendtoaddress(addr, 10)
         self.generate(self.nodes[0], 1)
@@ -91,7 +91,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         wallet.gettransaction(txid)
 
         self.log.info("Test getnewaddress returns new labelled address")
-        labeled_addr = wallet.getnewaddress(address_type="silent-payment", label="foo")
+        labeled_addr = wallet.getnewaddress(address_type="silent-payments", label="foo")
         assert labeled_addr != addr
         txid = self.def_wallet.sendtoaddress(labeled_addr, 10)
         self.generate(self.nodes[0], 1)
@@ -121,26 +121,81 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         # verify the wallet received the correct amount
         assert_equal(wallet.getbalance(), send_amount)
-        wallet.gettransaction(txid)
+        tx = wallet.gettransaction(txid)
         self.nodes[0].unloadwallet("persistence_test")
 
         # reopen the wallet - currently failing at this step
         self.nodes[0].loadwallet("persistence_test")
         wallet = self.nodes[0].get_wallet_rpc("persistence_test")
         assert_equal(wallet.getbalance(), send_amount)
-        wallet.gettransaction(txid)
+        loaded_tx = wallet.gettransaction(txid)
+        assert_equal(tx, loaded_tx)
 
         self.log.info("Wallet persistence verified successfully")
 
+    def test_import_rescan(self):
+        self.log.info("Check import rescan works for silent payments")
+
+        self.nodes[0].createwallet(wallet_name="alice", silent_payment=True)
+        self.nodes[0].createwallet(wallet_name="alice_wo", disable_private_keys=True, silent_payment=True)
+        alice = self.nodes[0].get_wallet_rpc("alice")
+        alice_wo = self.nodes[0].get_wallet_rpc("alice_wo")
+
+        address = alice.getnewaddress(address_type="silent-payments")
+        self.def_wallet.sendtoaddress(address, 10)
+        blockhash = self.generate(self.nodes[0], 1)[0]
+        timestamp = self.nodes[0].getblockheader(blockhash)["time"]
+        assert_approx(alice.getbalance(), 10, 0.0001)
+        assert_equal(alice_wo.getbalance(), 0)
+
+        alice_sp_desc = [d["desc"] for d in alice.listdescriptors()["descriptors"] if d["desc"].startswith("sp(")][0]
+        alice_wo.importdescriptors([{
+            "desc": alice_sp_desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": timestamp
+        }])
+
+        assert_approx(alice_wo.getbalance(), 10, 0.0001)
+
+    def test_rbf(self):
+        self.log.info("Check Silent Payments RBF")
+
+        self.nodes[0].createwallet(wallet_name="craig", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("craig")
+        address = wallet.getnewaddress(address_type="silent-payments")
+
+        txid = self.def_wallet.sendtoaddress(address, 49.99, replaceable=True)
+        assert_equal(self.nodes[0].getrawmempool(), [txid])
+        raw_tx = self.nodes[0].getrawtransaction(txid)
+        tx = self.nodes[0].decoderawtransaction(raw_tx)
+        assert_equal(len(tx["vin"]), 1)
+
+        psbt = self.def_wallet.psbtbumpfee(txid, fee_rate=10000)["psbt"]
+        decoded = self.nodes[0].decodepsbt(psbt)
+        assert_equal(len(decoded["tx"]["vin"]), 2)
+
+        res = self.def_wallet.walletprocesspsbt(psbt)
+        assert_equal(res["complete"], True)
+        txid = self.def_wallet.sendrawtransaction(res["hex"])
+        assert_equal(self.nodes[0].getrawmempool(), [txid])
+
+        assert_equal(wallet.getbalance(), 0)
+        self.generate(self.nodes[0], 1)
+        assert_approx(wallet.getbalance(), 49.99, 0.0001)
+
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
-        self.generate(self.nodes[0], 101)
+        self.generate(self.nodes[0], 102)
 
+        self.test_rbf()
         self.test_createwallet()
         self.test_encrypt_and_decrypt()
         self.test_encrypting_unencrypted()
         self.test_basic()
         self.test_wallet_persistence()
+        self.test_import_rescan()
+
 
 
 if __name__ == '__main__':

@@ -741,7 +741,7 @@ public:
     }
 
     // NOLINTNEXTLINE(misc-no-recursion)
-    void ExpandPrivate(int pos, const SigningProvider& provider, FlatSigningProvider& out) const final
+    void ExpandPrivate(int pos, const SigningProvider& provider, FlatSigningProvider& out) const override
     {
         for (const auto& p : m_pubkey_args) {
             p->GetPrivKey(pos, provider, out);
@@ -1391,6 +1391,21 @@ public:
 class SpDescriptor final : public DescriptorImpl
 {
     CKey m_scan_key;
+
+    std::unique_ptr<FlatSigningProvider> GetScanKeyProvider() const {
+        CKeyID scan_keyId;
+        auto& scan_pubkey{m_pubkey_args.at(0)};
+        if (auto root_pubkey{scan_pubkey->GetRootPubKey()}) {
+            scan_keyId = root_pubkey->GetID();
+        } else if (auto root_extpubkey{scan_pubkey->GetRootExtPubKey()}) {
+            scan_keyId = root_extpubkey->pubkey.GetID();
+        }
+        auto out{std::make_unique<FlatSigningProvider>()};
+        assert(!scan_keyId.IsNull());
+        out->keys.emplace(scan_keyId, m_scan_key);
+        return out;
+    }
+
 protected:
     std::vector<CScript> MakeScripts(const std::vector<CPubKey>&, std::span<const CScript>, FlatSigningProvider&) const override { return std::vector<CScript>(); }
 public:
@@ -1404,18 +1419,9 @@ public:
 
     bool ToStringHelper(const SigningProvider* arg, std::string& out, const StringType type, const DescriptorCache* cache = nullptr) const override
     {
-        FlatSigningProvider provider;
-        CKeyID scan_keyId;
-        auto& scan_pubkey{m_pubkey_args.at(0)};
-        if (auto root_pubkey{scan_pubkey->GetRootPubKey()}) {
-            scan_keyId = root_pubkey->GetID();
-        } else if (auto root_extpubkey{scan_pubkey->GetRootExtPubKey()}) {
-            scan_keyId = root_extpubkey->pubkey.GetID();
-        }
-        assert(!scan_keyId.IsNull());
-        provider.keys.emplace(scan_keyId, m_scan_key);
+        auto scan_key_provider{GetScanKeyProvider()};
         std::string scan_key;
-        scan_pubkey->ToPrivateString(provider, scan_key);
+        m_pubkey_args.at(0)->ToPrivateString(*scan_key_provider, scan_key);
         std::string ret{m_name + "(" + scan_key + ","};
         auto& spend_pubkey{m_pubkey_args.at(1)};
         std::string tmp;
@@ -1436,6 +1442,25 @@ public:
         }
         out = std::move(ret) + std::move(tmp) + ")";
         return true;
+    }
+
+    void ExpandPrivate(int pos, const SigningProvider& provider, FlatSigningProvider& out) const override {
+        FlatSigningProvider tmp;
+        auto scan_key_provider{GetScanKeyProvider()};
+        auto scan_pubkey{m_pubkey_args.at(0)->GetPubKey(0, *scan_key_provider, tmp)};
+        m_pubkey_args.at(0)->GetPrivKey(0, *scan_key_provider, tmp);
+        assert(tmp.keys.size() == 1);
+
+        auto spend_pubkey{m_pubkey_args.at(1)->GetPubKey(0, provider, tmp)};
+        m_pubkey_args.at(1)->GetPrivKey(0, provider, tmp);
+
+        auto it{tmp.keys.find(scan_pubkey->GetID())};
+        assert(it != tmp.keys.end());
+        assert(spend_pubkey.has_value());
+        out.sp_keys = std::make_pair(it->second, *spend_pubkey);
+
+        it = tmp.keys.find(spend_pubkey->GetID());
+        if (it != tmp.keys.end()) out.keys.emplace(spend_pubkey->GetID(), it->second);
     }
 
     std::unique_ptr<DescriptorImpl> Clone() const override

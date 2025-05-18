@@ -1387,6 +1387,63 @@ public:
     }
 };
 
+/** A parsed sp(...) descriptor */
+class SpDescriptor final : public DescriptorImpl
+{
+    CKey m_scan_key;
+protected:
+    std::vector<CScript> MakeScripts(const std::vector<CPubKey>&, std::span<const CScript>, FlatSigningProvider&) const override { return std::vector<CScript>(); }
+public:
+    SpDescriptor(std::unique_ptr<PubkeyProvider> scan_pubkey, std::unique_ptr<PubkeyProvider> spend_key, CKey scan_key) : DescriptorImpl(Vector(std::move(scan_pubkey), std::move(spend_key)), "sp"), m_scan_key(scan_key) {};
+
+    std::optional<OutputType> GetOutputType() const override { return OutputType::SILENT_PAYMENTS; }
+
+    bool IsSingleType() const final { return true; }
+
+    bool IsSolvable() const override { return false; }
+
+    bool ToStringHelper(const SigningProvider* arg, std::string& out, const StringType type, const DescriptorCache* cache = nullptr) const override
+    {
+        FlatSigningProvider provider;
+        CKeyID scan_keyId;
+        auto& scan_pubkey{m_pubkey_args.at(0)};
+        if (auto root_pubkey{scan_pubkey->GetRootPubKey()}) {
+            scan_keyId = root_pubkey->GetID();
+        } else if (auto root_extpubkey{scan_pubkey->GetRootExtPubKey()}) {
+            scan_keyId = root_extpubkey->pubkey.GetID();
+        }
+        assert(!scan_keyId.IsNull());
+        provider.keys.emplace(scan_keyId, m_scan_key);
+        std::string scan_key;
+        scan_pubkey->ToPrivateString(provider, scan_key);
+        std::string ret{m_name + "(" + scan_key + ","};
+        auto& spend_pubkey{m_pubkey_args.at(1)};
+        std::string tmp;
+        switch (type)
+        {
+            case StringType::NORMALIZED:
+                if (!spend_pubkey->ToNormalizedString(*arg, tmp, cache)) return false;
+                break;
+            case StringType::PRIVATE:
+                if (!spend_pubkey->ToPrivateString(*arg, tmp)) return false;
+            break;
+            case StringType::PUBLIC:
+                tmp = spend_pubkey->ToString();
+                break;
+            case StringType::COMPAT:
+                tmp = spend_pubkey->ToString(PubkeyProvider::StringType::COMPAT);
+                break;
+        }
+        out = std::move(ret) + std::move(tmp) + ")";
+        return true;
+    }
+
+    std::unique_ptr<DescriptorImpl> Clone() const override
+    {
+        return std::make_unique<SpDescriptor>(m_pubkey_args.at(0)->Clone(), m_pubkey_args.at(1)->Clone(), m_scan_key);
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////
 // Parser                                                                 //
 ////////////////////////////////////////////////////////////////////////////
@@ -1397,6 +1454,7 @@ enum class ParseScriptContext {
     P2WPKH,  //!< Inside wpkh() (no script, pubkey only)
     P2WSH,   //!< Inside wsh() (script becomes v0 witness script)
     P2TR,    //!< Inside tr() (either internal key, or BIP342 script leaf)
+    SP,      //!< Inside sp()
 };
 
 std::optional<uint32_t> ParseKeyPathNum(std::span<const char> elem, bool& apostrophe, std::string& error)
@@ -1570,6 +1628,34 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t key_exp_i
         type = DeriveType::HARDENED;
     }
     if (!ParseKeyPath(split, paths, apostrophe, error, /*allow_multipath=*/true)) return {};
+    if (ctx == ParseScriptContext::SP) {
+        for (auto path : paths) {
+            KeyOriginInfo origin;
+            CKeyID id = extkey.key.IsValid() ? extkey.key.GetPubKey().GetID() : extpubkey.pubkey.GetID();
+            std::copy(id.begin(), id.begin() + 4, origin.fingerprint);
+            auto tmp_extkey{extkey};
+            auto tmp_extpubkey{extpubkey};
+            for (auto entry : path) {
+                origin.path.push_back(entry);
+                if (tmp_extkey.key.IsValid() && !tmp_extkey.Derive(tmp_extkey, entry)) {
+                    error = strprintf("key '%s' is not valid", str);
+                    return {};
+                }
+                if (tmp_extpubkey.pubkey.IsValid() && !tmp_extpubkey.Derive(tmp_extpubkey, entry)) {
+                    error = strprintf("key '%s' is not valid", str);
+                    return {};
+                }
+            }
+            if (tmp_extkey.key.IsValid()) {
+                tmp_extpubkey = tmp_extkey.Neuter();
+                out.keys.emplace(tmp_extpubkey.pubkey.GetID(), tmp_extkey.key);
+            }
+            auto pubkey{std::make_unique<ConstPubkeyProvider>(key_exp_index, tmp_extpubkey.pubkey, false)};
+            ret.emplace_back(std::make_unique<OriginPubkeyProvider>(key_exp_index, origin, std::move(pubkey), apostrophe));
+        }
+        return ret;
+    }
+
     if (extkey.key.IsValid()) {
         extpubkey = extkey.Neuter();
         out.keys.emplace(extpubkey.pubkey.GetID(), extkey.key);
@@ -1771,6 +1857,62 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
             ret.emplace_back(std::make_unique<PKDescriptor>(std::move(pubkey), ctx == ParseScriptContext::P2TR));
         }
         return ret;
+    }
+    if (ctx == ParseScriptContext::TOP && Func("sp", expr)) {
+        auto scan_pubkeys{ParsePubkey(key_exp_index, Expr(expr), ParseScriptContext::SP, out, error)};
+        if (scan_pubkeys.empty()) {
+            error = strprintf("sp(): %s", error);
+            return {};
+        }
+        if (!Const(",", expr)) {
+            error = strprintf("sp(): expected ',', got '%c'", expr[0]);
+            return {};
+        }
+        ++key_exp_index;
+
+        auto spend_pubkeys{ParsePubkey(key_exp_index, Expr(expr), ParseScriptContext::SP, out, error)};
+        if (spend_pubkeys.empty()) {
+            error = strprintf("sp(): %s", error);
+            return {};
+        }
+
+        std::set<CKeyID> scan_keys_rm;
+        for (auto& scan_pubkey : scan_pubkeys) {
+            CKeyID scan_keyId;
+            if (auto root_pubkey{scan_pubkey->GetRootPubKey()}) {
+                scan_keyId = root_pubkey->GetID();
+            } else if (auto root_extpubkey{scan_pubkey->GetRootExtPubKey()}) {
+                scan_keyId = root_extpubkey->pubkey.GetID();
+            }
+            if (scan_keyId.IsNull()) {
+                error = "sp(): could not get scan key ID";
+                return {};
+            }
+
+            auto it{out.keys.find(scan_keyId)};
+            scan_keys_rm.insert(scan_keyId);
+
+            if (it == out.keys.end()) {
+                error = "sp(): requires the scan priv key";
+                return {};
+            }
+
+            for (auto& spend_pubkey : spend_pubkeys) {
+                ret.emplace_back(std::make_unique<SpDescriptor>(std::move(scan_pubkey), std::move(spend_pubkey), std::move(it->second)));
+            }
+        }
+
+        // Remove all scan private keys to allow
+        // importation of sp descriptors into watch-only wallets
+        for (auto keyId: scan_keys_rm) {
+            out.keys.erase(keyId);
+        }
+
+        ++key_exp_index;
+        return ret;
+    } else if (Func("sp", expr)) {
+        error = "Can only have sp() at top level";
+        return {};
     }
     if ((ctx == ParseScriptContext::TOP || ctx == ParseScriptContext::P2SH || ctx == ParseScriptContext::P2WSH) && Func("pkh", expr)) {
         auto pubkeys = ParsePubkey(key_exp_index, expr, ctx, out, error);

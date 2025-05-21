@@ -211,6 +211,34 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 1)
         assert_approx(wallet.getbalance(), 49.99, 0.0001)
 
+    def test_conflict(self):
+        self.log.info("Check Silent Payments wallet handles conflicts")
+
+        self.nodes[0].createwallet(wallet_name="conflict", silent_payments=True)
+        wallet = self.nodes[0].get_wallet_rpc("conflict")
+        address = wallet.getnewaddress(address_type="bech32m")
+        unspents = self.def_wallet.listunspent()
+        # walletcreatefundedpsbt fails when receipients include silent-payment addresses
+        # use bech32m instead
+        psbt = self.def_wallet.walletcreatefundedpsbt(inputs=[unspents[0]], outputs=[{address : 49.99}])["psbt"]
+        tx1 = self.def_wallet.walletprocesspsbt(psbt=psbt, finalize=True)['hex']
+
+        # Create tx2 to spend the same input as tx1
+        psbt = self.def_wallet.walletcreatefundedpsbt(inputs=[unspents[0]], outputs=[{self.def_wallet.getnewaddress() : 49.99}])["psbt"]
+        tx2 =  self.def_wallet.walletprocesspsbt(psbt=psbt, finalize=True)['hex']
+
+        self.nodes[0].sendrawtransaction(tx1)
+
+        # Mine conflicting transaction on node 1
+        self.disconnect_nodes(0, 1)
+        self.nodes[1].sendrawtransaction(tx2)
+        self.generate(self.nodes[1], 1, sync_fun=self.no_op)
+
+        self.connect_nodes(0, 1)
+        self.sync_blocks()
+
+        assert_equal(wallet.getbalance(), 0)
+
     def test_createwallet_descriptor(self):
         self.log.info("Check createwalletdescriptor works with silent payments descriptor")
 
@@ -280,6 +308,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_import_rescan()
         self.test_createwallet_descriptor()
         self.test_getaddressinfo()
+        self.test_conflict()
 
 
 

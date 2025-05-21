@@ -1643,7 +1643,7 @@ bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& sp
     AssertLockHeld(cs_wallet);
 
     // Scan for silent payments first
-    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
+    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase() && !spent_coins.empty()) {
         auto sp_data = GetSilentPaymentsData(tx, spent_coins);
         if (sp_data.has_value()) {
             bool found{false};

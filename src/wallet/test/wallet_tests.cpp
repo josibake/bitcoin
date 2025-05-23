@@ -384,6 +384,15 @@ public:
             BOOST_CHECK(res);
             tx = res->tx;
         }
+        std::map<COutPoint, Coin> spent_coins;
+        for (const CTxIn& txin : tx->vin) {
+            spent_coins[txin.prevout]; // Create empty map entry keyed by prevout.
+        }
+        wallet->chain().findCoins(spent_coins);
+        {
+            LOCK(wallet->cs_wallet);
+            wallet->IsMine(*tx, spent_coins);
+        }
         wallet->CommitTransaction(tx, {}, {});
         CMutableTransaction blocktx;
         {

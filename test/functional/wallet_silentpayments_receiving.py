@@ -148,6 +148,18 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
 
         assert_approx(alice_wo.getbalance(), 10, 0.0001)
 
+        self.log.info("Check descriptor update works for silent payments")
+        # Import the same descriptor again to test the update
+        res = alice_wo.importdescriptors([{
+            "desc": alice_sp_desc,
+            "active": True,
+            "next_index": 0,
+            "timestamp": timestamp
+        }])
+        assert_equal(res[0]["success"], True)
+
+        assert_approx(alice_wo.getbalance(), 10, 0.0001)
+
     def test_rbf(self):
         self.log.info("Check Silent Payments RBF")
 

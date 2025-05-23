@@ -80,10 +80,18 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         assert_equal(wallet.getbalance(), 10)
         wallet.gettransaction(txid)
 
-        self.log.info("Test self-transfer")
-        txid = wallet.send({addr: 5})
+        self.log.info("Test change address")
+        change_addr = wallet.getrawchangeaddress(address_type="silent-payments")
+        assert addr.startswith("sp")
+        txid = self.def_wallet.sendtoaddress(change_addr, 5)
         self.generate(self.nodes[0], 1)
-        assert_approx(wallet.getbalance(), 10, 0.0001)
+        assert_approx(wallet.getbalance(), 15)
+        wallet.gettransaction(txid)
+
+        self.log.info("Test self-transfer")
+        txid = wallet.send({addr: 5, change_addr: 5})
+        self.generate(self.nodes[0], 1)
+        assert_approx(wallet.getbalance(), 15, 0.0001)
 
         wallet.sendall([self.def_wallet.getnewaddress()])
         self.generate(self.nodes[0], 1)

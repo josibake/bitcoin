@@ -50,6 +50,7 @@
 #include <sync.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <undo.h>
 #include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
@@ -1183,7 +1184,7 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
     return true;
 }
 
-bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxState& state, bool fUpdate, bool rescanning_old_block)
+bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const std::map<COutPoint, Coin>& spent_coins, const SyncTxState& state, bool fUpdate, bool rescanning_old_block)
 {
     const CTransaction& tx = *ptx;
     {
@@ -1204,7 +1205,8 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
 
         bool fExisted = mapWallet.count(tx.GetHash()) != 0;
         if (fExisted && !fUpdate) return false;
-        if (fExisted || IsMine(tx) || IsFromMe(tx))
+        // Call IsMine first to give SilentPaymentDescriptorScriptPubKeyMan a chance to scan
+        if (IsMine(tx, spent_coins) || fExisted || IsFromMe(tx))
         {
             /* Check if any keys in the wallet keypool that were supposed to be unused
              * have appeared in a new transaction. If so, remove those keys from the keypool.
@@ -1378,9 +1380,9 @@ void CWallet::RecursiveUpdateTxState(WalletBatch* batch, const uint256& tx_hash,
     }
 }
 
-void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& state, bool update_tx, bool rescanning_old_block)
+void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& state, const std::map<COutPoint, Coin>& spent_coins, bool update_tx, bool rescanning_old_block)
 {
-    if (!AddToWalletIfInvolvingMe(ptx, state, update_tx, rescanning_old_block))
+    if (!AddToWalletIfInvolvingMe(ptx, spent_coins, state, update_tx, rescanning_old_block))
         return; // Not one of ours
 
     // If a transaction changes 'conflicted' state, that changes the balance
@@ -1389,9 +1391,9 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     MarkInputsDirty(ptx);
 }
 
-void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
+void CWallet::transactionAddedToMempool(const CTransactionRef& tx, const std::map<COutPoint, Coin>& spent_coins) {
     LOCK(cs_wallet);
-    SyncTransaction(tx, TxStateInMempool{});
+    SyncTransaction(tx, TxStateInMempool{}, spent_coins);
 
     auto it = mapWallet.find(tx->GetHash());
     if (it != mapWallet.end()) {
@@ -1480,10 +1482,32 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
     // Uses chain max time and twice the grace period to adjust time for block time variability.
     if (block.chain_time_max < m_birth_time.load() - (TIMESTAMP_WINDOW * 2)) return;
 
+    // Retrieve the undo data from disk
+    // Although BlockInfo has a field for the undo data, it actually is not provided by blockConnected,
+    // so we need to pull it up from disk.
+    // Since blocks with only one tx do not have any relevant undo data, we can avoid unnecessary disk I/O
+    // by skipping this step for those blocks.
+    CBlockUndo block_undo;
+    if (block.data->vtx.size() > 0 && IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS)) {
+        chain().findBlock(block.hash, FoundBlock().undoData(block_undo));
+    }
+
     // Scan block
     for (size_t index = 0; index < block.data->vtx.size(); index++) {
-        SyncTransaction(block.data->vtx[index], TxStateConfirmed{block.hash, block.height, static_cast<int>(index)});
-        transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
+        CTransactionRef tx{block.data->vtx.at(index)};
+
+        std::map<COutPoint, Coin> spent_coins;
+        if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && index > 0
+            && Assume(index - 1 < block_undo.vtxundo.size())) {
+            // Retrieve the undo data for this tx and build the spent coins map
+            const auto& tx_undo{block_undo.vtxundo.at(index - 1)};
+            for (size_t i = 0; i < tx_undo.vprevout.size(); ++i) {
+                spent_coins.emplace(tx->vin.at(i).prevout, tx_undo.vprevout.at(i));
+            }
+        }
+
+        SyncTransaction(tx, TxStateConfirmed{block.hash, block.height, static_cast<int>(index)}, spent_coins);
+        transactionRemovedFromMempool(tx, MemPoolRemovalReason::BLOCK);
     }
 }
 
@@ -1604,6 +1628,25 @@ bool CWallet::IsMine(const CTransaction& tx) const
         if (IsMine(txout))
             return true;
     return false;
+}
+
+bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& spent_coins)
+{
+    AssertLockHeld(cs_wallet);
+
+    // Scan for silent payments first
+    if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
+        auto  sp_data = GetSilentPaymentsData(tx, spent_coins);
+        if (sp_data.has_value()) {
+            for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
+                if (sp_spkm->IsMine(sp_data->first, sp_data->second)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return IsMine(tx);
 }
 
 isminetype CWallet::IsMine(const COutPoint& outpoint) const
@@ -1855,7 +1898,8 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
         if (fetch_block) {
             // Read block data
             CBlock block;
-            chain().findBlock(block_hash, FoundBlock().data(block));
+            CBlockUndo block_undo;
+            chain().findBlock(block_hash, FoundBlock().data(block).undoData(block_undo));
 
             if (!block.IsNull()) {
                 LOCK(cs_wallet);
@@ -1867,7 +1911,19 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
                     break;
                 }
                 for (size_t posInBlock = 0; posInBlock < block.vtx.size(); ++posInBlock) {
-                    SyncTransaction(block.vtx[posInBlock], TxStateConfirmed{block_hash, block_height, static_cast<int>(posInBlock)}, fUpdate, /*rescanning_old_block=*/true);
+                    CTransactionRef tx = block.vtx.at(posInBlock);
+
+                    std::map<COutPoint, Coin> spent_coins;
+                    if (posInBlock > 0) {
+                        // Retrieve the undo data for this tx and build the spent coins map
+                        const CTxUndo& tx_undo = block_undo.vtxundo.at(posInBlock - 1);
+                        for (size_t i = 0; i < tx_undo.vprevout.size(); ++i) {
+                            spent_coins.emplace(tx->vin.at(i).prevout, tx_undo.vprevout.at(i));
+                        }
+                    }
+
+                    // Sync tx with wallet
+                    SyncTransaction(block.vtx[posInBlock], TxStateConfirmed{block_hash, block_height, static_cast<int>(posInBlock)}, spent_coins, fUpdate, /*rescanning_old_block=*/true);
                 }
                 // scan succeeded, record block as most recent successfully scanned
                 result.last_scanned_block = block_hash;
@@ -3528,6 +3584,8 @@ DescriptorScriptPubKeyMan& CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, Wa
     DescriptorScriptPubKeyMan* spk_manager;
     if (IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
         spk_manager = new ExternalSignerScriptPubKeyMan(*this, desc, m_keypool_size);
+    } else if (desc.descriptor->GetOutputType() == OutputType::SILENT_PAYMENTS) {
+        spk_manager = new SilentPaymentDescriptorScriptPubKeyMan(*this, desc);
     } else {
         spk_manager = new DescriptorScriptPubKeyMan(*this, desc, m_keypool_size);
     }
@@ -3538,7 +3596,13 @@ DescriptorScriptPubKeyMan& CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, Wa
 DescriptorScriptPubKeyMan& CWallet::SetupDescriptorScriptPubKeyMan(WalletBatch& batch, const CExtKey& master_key, const OutputType& output_type, bool internal)
 {
     AssertLockHeld(cs_wallet);
-    auto spk_manager = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, m_keypool_size));
+    std::unique_ptr<DescriptorScriptPubKeyMan> spk_manager;
+    if (output_type == OutputType::SILENT_PAYMENTS) {
+        spk_manager = std::unique_ptr<DescriptorScriptPubKeyMan>(new SilentPaymentDescriptorScriptPubKeyMan(*this));
+    } else {
+        spk_manager = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, m_keypool_size));
+    }
+
     if (IsCrypted()) {
         if (IsLocked()) {
             throw std::runtime_error(std::string(__func__) + ": Wallet is locked, cannot setup new descriptors");
@@ -3560,6 +3624,8 @@ void CWallet::SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey&
     AssertLockHeld(cs_wallet);
     for (bool internal : {false, true}) {
         for (OutputType t : OUTPUT_TYPES) {
+            if (t == OutputType::SILENT_PAYMENTS &&
+                (internal == true || !IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS))) continue;
             SetupDescriptorScriptPubKeyMan(batch, master_key, t, internal);
         }
     }
@@ -3697,6 +3763,20 @@ DescriptorScriptPubKeyMan* CWallet::GetDescriptorScriptPubKeyMan(const WalletDes
     return nullptr;
 }
 
+std::set<SilentPaymentDescriptorScriptPubKeyMan*> CWallet::GetSilentPaymentsSPKMs() const
+{
+    std::set<SilentPaymentDescriptorScriptPubKeyMan*> out;
+    for (auto& spk_man_pair : m_spk_managers) {
+        // Try to downcast to SilentPaymentDescriptorScriptPubKeyMan then check if the descriptors match
+        SilentPaymentDescriptorScriptPubKeyMan* spk_manager = dynamic_cast<SilentPaymentDescriptorScriptPubKeyMan*>(spk_man_pair.second.get());
+        if (spk_manager != nullptr) {
+            out.insert(spk_manager);
+        }
+    }
+
+    return out;
+}
+
 std::optional<bool> CWallet::IsInternalScriptPubKeyMan(ScriptPubKeyMan* spk_man) const
 {
     // only active ScriptPubKeyMan can be internal
@@ -3732,7 +3812,12 @@ util::Result<ScriptPubKeyMan*> CWallet::AddWalletDescriptor(WalletDescriptor& de
             return util::Error{util::ErrorString(spkm_res)};
         }
     } else {
-        auto new_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, desc, m_keypool_size));
+        std::unique_ptr<DescriptorScriptPubKeyMan> new_spk_man;
+        if (desc.descriptor->GetOutputType() == OutputType::SILENT_PAYMENTS) {
+            new_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new SilentPaymentDescriptorScriptPubKeyMan(*this, desc));
+        } else {
+            new_spk_man = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, desc, m_keypool_size));
+        }
         spk_man = new_spk_man.get();
 
         // Save the descriptor to memory
@@ -3754,7 +3839,7 @@ util::Result<ScriptPubKeyMan*> CWallet::AddWalletDescriptor(WalletDescriptor& de
 
     // Apply the label if necessary
     // Note: we disable labels for ranged descriptors
-    if (!desc.descriptor->IsRange()) {
+    if (!desc.descriptor->IsRange() && desc.descriptor->GetOutputType() != OutputType::SILENT_PAYMENTS) {
         auto script_pub_keys = spk_man->GetScriptPubKeys();
         if (script_pub_keys.empty()) {
             WalletLogPrintf("Could not generate scriptPubKeys (cache is empty)\n");

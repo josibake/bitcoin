@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from test_framework.descriptors import descsum_create
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_approx,
@@ -186,6 +187,30 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 1)
         assert_approx(wallet.getbalance(), 49.99, 0.0001)
 
+    def test_createwallet_descriptor(self):
+        self.log.info("Check createwalletdescriptor works with silent payments descriptor")
+
+        self.nodes[0].createwallet(wallet_name="sp_desc", silent_payments=True,)
+        wallet = self.nodes[0].get_wallet_rpc("sp_desc")
+        xpub_info = wallet.gethdkeys(private=True)
+        xprv = xpub_info[0]["xprv"]
+        expected_descs = []
+        for desc in wallet.listdescriptors(private=True)["descriptors"]:
+            if desc["desc"].startswith("sp("):
+                expected_descs.append(desc["desc"])
+
+        self.nodes[0].createwallet("blank", blank=True)
+        blank_wallet = self.nodes[0].get_wallet_rpc("blank")
+
+        # Import one active descriptor
+        assert_equal(blank_wallet.importdescriptors([{"desc": descsum_create(f"pkh({xprv}/44h/2h/0h/0/0/*)"), "timestamp": "now", "active": True}])[0]["success"], True)
+        assert_equal(len(blank_wallet.listdescriptors()["descriptors"]), 1)
+        assert_equal(len(blank_wallet.gethdkeys()), 1)
+
+        blank_wallet.createwalletdescriptor(type="silent-payments", internal=False)
+        new_descs = [d['desc'] for d in blank_wallet.listdescriptors(private=True)["descriptors"] if d["desc"].startswith("sp(")]
+        assert_equal(new_descs, expected_descs)
+
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 102)
@@ -197,6 +222,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_basic()
         self.test_wallet_persistence()
         self.test_import_rescan()
+        self.test_createwallet_descriptor()
 
 
 

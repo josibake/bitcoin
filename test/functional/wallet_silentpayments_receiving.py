@@ -208,8 +208,15 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         assert_equal(len(blank_wallet.gethdkeys()), 1)
 
         blank_wallet.createwalletdescriptor(type="silent-payments", internal=False)
-        new_descs = [d['desc'] for d in blank_wallet.listdescriptors(private=True)["descriptors"] if d["desc"].startswith("sp(")]
-        assert_equal(new_descs, expected_descs)
+        new_descs = [d for d in blank_wallet.listdescriptors(private=True)["descriptors"] if d["desc"].startswith("sp(")]
+        assert_equal([d['desc'] for d in new_descs], expected_descs)
+        for desc in new_descs:
+            assert_equal(desc["active"], True)
+            # Silent Payments descriptors are both internal and external
+            # The wallet only checks if a descriptor is internal
+            # because it does not expect a descriptor to be both internal and external
+            # Hence, this flag will be 'True'
+            assert_equal(desc["internal"], True)
 
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)

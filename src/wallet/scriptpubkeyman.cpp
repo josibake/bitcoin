@@ -1708,6 +1708,29 @@ isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(const CScript& script)
     return ISMINE_NO;
 }
 
+isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(const CTxDestination& dest) const
+{
+    LOCK(cs_desc_man);
+    if (std::holds_alternative<V0SilentPaymentDestination>(dest)) {
+        const auto& sp_dest = std::get<V0SilentPaymentDestination>(dest);
+        const auto provider{GetSPProvider()};
+        const auto keys{GetKeys()};
+        if (sp_dest.m_scan_pubkey != provider.sp_keys.first.GetPubKey()) {
+            return ISMINE_NO;
+        }
+        const bool has_spend_key{keys.count(provider.sp_keys.second.GetID()) > 0};
+        if (sp_dest.m_spend_pubkey == provider.sp_keys.second) {
+            return has_spend_key ? ISMINE_SPENDABLE : ISMINE_WATCH_ONLY;
+        }
+        for (const auto& tweak_pair : m_map_label_tweaks) {
+            if (sp_dest.m_spend_pubkey == tweak_pair.first) {
+                return has_spend_key ? ISMINE_SPENDABLE : ISMINE_WATCH_ONLY;
+            }
+        }
+    }
+    return ISMINE_NO;
+}
+
 isminetype SilentPaymentDescriptorScriptPubKeyMan::IsMine(const std::vector<XOnlyPubKey>& output_keys, const bip352::PublicData& public_data)
 {
     LOCK(cs_desc_man);

@@ -90,9 +90,11 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         wallet.gettransaction(txid)
 
         self.log.info("Test self-transfer")
-        txid = wallet.send({addr: 5, change_addr: 5})
+        result = wallet.send({addr: 5, change_addr: 5})
         self.generate(self.nodes[0], 1)
         assert_approx(wallet.getbalance(), 15, 0.0001)
+        self.log.info("Check that self-transfer is detected by listtransactions")
+        assert(any(tx["txid"] == result["txid"] for tx in wallet.listtransactions()))
 
         wallet.sendall([self.def_wallet.getnewaddress()])
         self.generate(self.nodes[0], 1)

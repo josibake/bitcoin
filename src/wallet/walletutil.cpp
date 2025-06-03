@@ -122,7 +122,10 @@ std::optional<std::pair<std::vector<XOnlyPubKey>, bip352::PublicData>> GetSilent
         std::vector<std::vector<unsigned char>> solutions;
         TxoutType type = Solver(txout.scriptPubKey, solutions);
         if (type == TxoutType::WITNESS_V1_TAPROOT) {
-            output_keys.emplace_back(solutions[0]);
+            const XOnlyPubKey xonlypubkey{solutions[0]};
+            if (xonlypubkey.IsFullyValid()) {
+                output_keys.emplace_back(std::move(xonlypubkey));
+            }
         } else if (type == TxoutType::WITNESS_UNKNOWN) {
             // Cannot have outputs with unknown witness versions
             return std::nullopt;

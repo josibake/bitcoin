@@ -1864,4 +1864,9 @@ std::vector<WalletDestination> SilentPaymentDescriptorScriptPubKeyMan::MarkUnuse
     return {};
 }
 
+unsigned int SilentPaymentDescriptorScriptPubKeyMan::GetKeyPoolSize() const
+{
+    return 0;
+}
+
 } // namespace wallet

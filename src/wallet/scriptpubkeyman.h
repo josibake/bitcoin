@@ -457,6 +457,8 @@ public:
     void AddTweak(const uint256& tweak);
 
     std::vector<WalletDestination> MarkUnusedAddresses(const CScript& script) override;
+
+    unsigned int GetKeyPoolSize() const override;
 };
 
 /** struct containing information needed for migrating legacy wallets to descriptor wallets */

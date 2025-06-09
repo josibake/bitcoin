@@ -1644,8 +1644,13 @@ bool DescriptorScriptPubKeyMan::CanUpdateToWalletDescriptor(const WalletDescript
 SilentPaymentDescriptorScriptPubKeyMan::SilentPaymentDescriptorScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor)
     :   DescriptorScriptPubKeyMan(storage, descriptor, 0)
 {
+    PopulateLabelTweaks();
+}
+
+void SilentPaymentDescriptorScriptPubKeyMan::PopulateLabelTweaks()
+{
     LOCK(cs_desc_man);
-    if (descriptor.descriptor->GetOutputType() != OutputType::SILENT_PAYMENTS) {
+    if (m_wallet_descriptor.descriptor->GetOutputType() != OutputType::SILENT_PAYMENTS) {
         throw std::runtime_error(std::string(__func__) + ": descriptor is not a Silent Payment Descriptor");
     }
     const auto provider{GetSPProvider()};
@@ -1657,6 +1662,13 @@ SilentPaymentDescriptorScriptPubKeyMan::SilentPaymentDescriptorScriptPubKeyMan(W
         // Add the other generated labelled destinations
         m_map_label_tweaks.insert(bip352::CreateLabelTweak(provider.sp_keys.first, i));
     }
+}
+
+bool SilentPaymentDescriptorScriptPubKeyMan::SetupDescriptorGeneration(WalletBatch& batch, const CExtKey& master_key, OutputType addr_type, bool internal)
+{
+    if (!DescriptorScriptPubKeyMan::SetupDescriptorGeneration(batch, master_key, addr_type, internal)) return false;
+    PopulateLabelTweaks();
+    return true;
 }
 
 util::Result<CTxDestination> SilentPaymentDescriptorScriptPubKeyMan::GetNewDestination(const OutputType type)

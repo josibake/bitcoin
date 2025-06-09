@@ -359,7 +359,7 @@ public:
     bool IsHDEnabled() const override;
 
     //! Setup descriptors based on the given CExtkey
-    bool SetupDescriptorGeneration(WalletBatch& batch, const CExtKey& master_key, OutputType addr_type, bool internal);
+    virtual bool SetupDescriptorGeneration(WalletBatch& batch, const CExtKey& master_key, OutputType addr_type, bool internal);
 
     bool HavePrivateKeys() const override;
     bool HasPrivKey(const CKeyID& keyid) const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
@@ -421,6 +421,7 @@ private:
     TweakMap m_map_spk_tweaks GUARDED_BY(cs_desc_man);
     LabelTweakMap m_map_label_tweaks GUARDED_BY(cs_desc_man);
 
+    void PopulateLabelTweaks();
     FlatSigningProvider GetSPProvider() const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
     std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CScript& script, bool include_private = false) const override;
 
@@ -433,6 +434,8 @@ public:
     SilentPaymentDescriptorScriptPubKeyMan(WalletStorage& storage)
         :   DescriptorScriptPubKeyMan(storage, 0)
         {}
+
+    bool SetupDescriptorGeneration(WalletBatch& batch, const CExtKey& master_key, OutputType addr_type, bool internal) override;
 
     util::Result<CTxDestination> GetNewDestination(const OutputType type) override;
     util::Result<CTxDestination> GetNewLabeledDestination(uint64_t& index);

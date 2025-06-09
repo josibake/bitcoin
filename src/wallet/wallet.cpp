@@ -1647,6 +1647,7 @@ bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& sp
     if (IsWalletFlagSet(WALLET_FLAG_SILENT_PAYMENTS) && !tx.IsCoinBase()) {
         auto  sp_data = GetSilentPaymentsData(tx, spent_coins);
         if (sp_data.has_value()) {
+            bool found{false};
             for (SilentPaymentDescriptorScriptPubKeyMan* sp_spkm : GetSilentPaymentsSPKMs()) {
                 // Because we have (likely) never seen these outputs before, they are not in our address book.
                 // We have IsMine also return the found outputs here so we can update the address book
@@ -1662,9 +1663,10 @@ bool CWallet::IsMine(const CTransaction& tx, const std::map<COutPoint, Coin>& sp
                         if (found_output.label.has_value()) continue;
                         SetAddressBook(WitnessV1Taproot{found_output.output}, "", AddressPurpose::RECEIVE);
                     }
-                    return true;
+                    found = true;
                 }
             }
+            if (found) return found;
         }
     }
 

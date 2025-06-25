@@ -231,6 +231,31 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
             # Hence, this flag will be 'True'
             assert_equal(desc["internal"], True)
 
+    def test_getaddressinfo(self):
+        self.log.info("Check getaddressinfo works with silent payments addresses")
+
+        self.nodes[0].createwallet(wallet_name="sp_info", silent_payments=True)
+        wallet = self.nodes[0].get_wallet_rpc("sp_info")
+        def test_addressinfo(addr):
+            info = wallet.getaddressinfo(addr)
+            desc = info["parent_desc"]
+            assert_equal(info["ismine"], True)
+            assert_equal(info["solvable"], False)
+            assert_equal(info["iswatchonly"], False)
+
+            txid = self.def_wallet.sendtoaddress(addr, 10)
+            self.generate(self.nodes[0], 1)
+            tx = wallet.gettransaction(txid)
+            onchain_addr = tx['details'][0]['address']
+            info = wallet.getaddressinfo(onchain_addr)
+            assert_equal(info["ismine"], True)
+            assert_equal(info["solvable"], True)
+            assert_equal(info["iswatchonly"], False)
+            assert_equal(info["parent_desc"], desc)
+
+        test_addressinfo(wallet.getnewaddress(address_type="silent-payments"))
+        test_addressinfo(wallet.getrawchangeaddress(address_type="silent-payments"))
+
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 102)
@@ -243,6 +268,7 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
         self.test_wallet_persistence()
         self.test_import_rescan()
         self.test_createwallet_descriptor()
+        self.test_getaddressinfo()
 
 
 

@@ -119,11 +119,12 @@ static void secp256k1_silentpayments_create_t_k(secp256k1_scalar *t_k_scalar, co
     secp256k1_scalar_set_b32(t_k_scalar, hash_ser, &overflow);
     VERIFY_CHECK(!overflow);
     VERIFY_CHECK(!secp256k1_scalar_is_zero(t_k_scalar));
-    /* While not technically "secret" data, explicitly clear hash_ser since leaking this would allow an attacker
+    /* While not technically "secret" data, explicitly clear hash and hash_ser since leaking this would allow an attacker
      * to identify the resulting transaction as a silent payments transaction and potentially link the transaction
      * back to the silent payment address
      */
     secp256k1_memclear(hash_ser, sizeof(hash_ser));
+    secp256k1_sha256_clear(&hash);
 }
 
 static int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char *shared_secret33, const secp256k1_pubkey *recipient_labeled_spend_pubkey, uint32_t k) {
@@ -141,7 +142,7 @@ static int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context
         return 0;
     }
     ret = secp256k1_eckey_pubkey_tweak_add(&P_output_ge, &t_k_scalar);
-    /* tweak add only fails if t_k_scalar is equal to the dlog of P_output_ge, but t_k_scalar is the output of a collision resistant hash function. */
+    /* tweak add only fails if t_k_scalar is equal to the dlog of -P_output_ge, but t_k_scalar is the output of a collision resistant hash function. */
     /* TODO: consider declassify ret */
     /* TODO: but we don't want to imply this can never happen */
     VERIFY_CHECK(ret);
@@ -430,7 +431,6 @@ int secp256k1_silentpayments_recipient_public_data_create(
     } else {
         ARG_CHECK(n_plain_pubkeys == 0);
     }
-    secp256k1_memclear(input_hash_local, 32);
 
     /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
     secp256k1_gej_set_infinity(&A_sum_gej);

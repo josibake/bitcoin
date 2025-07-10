@@ -200,7 +200,7 @@ typedef struct secp256k1_silentpayments_recipient_public_data {
  *  for regular and one for x-only public keys, in order to avoid the need of
  *  users converting to a common pubkey format before calling this function.
  *  The resulting data can be used for scanning on the recipient side, or
- *  stored in an index for later use (e.g., wallet rescanning, vending data to
+ *  stored in an index for later use (e.g., wallet rescanning, sending data to
  *  light clients).
  *
  *  If calling this function for simply aggregating the public transaction data
@@ -248,7 +248,7 @@ SECP256K1_API int secp256k1_silentpayments_recipient_public_data_serialize(
     const secp256k1_silentpayments_recipient_public_data *public_data
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
-/** Parse a 33-byte sequence into a silent_payments_public_data object.
+/** Parse a 33-byte sequence into a silentpayments_recipients_public_data object.
  *
  *  Returns: 1 if the data was able to be parsed.
  *           0 if the sequence is invalid (e.g., does not represent a valid
@@ -289,7 +289,7 @@ typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const unsi
  *            output: the x-only public key for the taproot output
  *             tweak: the 32-byte tweak needed to spend the output
  *  found_with_label: boolean value to indicate if the output was sent to a
- *                    labelled address. If true, label will be set with a valid
+ *                    labeled address. If true, label will be set with a valid
  *                    public key.
  *             label: public key representing the label used.
  *                    If found_with_label = false, this is set to an invalid
@@ -399,7 +399,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *                               or recipient's perspective with routines from
  *                               above
  *       recipient_spend_pubkey: pointer to the recipient's spend pubkey
- *                               (labelled or unlabelled)
+ *                               (labeled or unlabeled)
  *                            k: output counter (initially set to 0, must be
  *                               incremented for each additional output created
  *                               or after each output found when scanning)

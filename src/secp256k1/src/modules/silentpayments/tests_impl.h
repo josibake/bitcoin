@@ -275,7 +275,7 @@ static void test_send_api(void) {
 }
 
 static void test_label_api(void) {
-    secp256k1_pubkey l, s, ls, e; /* label pk, spend pk, labelled spend pk, expected labelled spend pk */
+    secp256k1_pubkey l, s, ls, e; /* label pk, spend pk, labeled spend pk, expected labeled spend pk */
     unsigned char lt[32];         /* label tweak */
     const unsigned char expected[33] = {
         0x03,0xdc,0x7f,0x09,0x9a,0xbe,0x95,0x7a,
@@ -284,7 +284,7 @@ static void test_label_api(void) {
         0x46,0x38,0x60,0x28,0xa8,0x1a,0x77,0xd4,0x91
     };
 
-    /* Create a label and labelled spend public key, verify we get the expected result */
+    /* Create a label and labeled spend public key, verify we get the expected result */
     CHECK(secp256k1_ec_pubkey_parse(CTX, &s, BOB_ADDRESS[1], 33));
     CHECK(secp256k1_silentpayments_recipient_create_label(CTX, &l, lt, ALICE_SECKEY, 1));
     CHECK(secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(CTX, &ls, &s, &l));

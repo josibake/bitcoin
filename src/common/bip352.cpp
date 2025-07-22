@@ -26,6 +26,38 @@ extern secp256k1_context* secp256k1_context_sign; // TODO: this is hacky, is the
 
 namespace bip352 {
 
+/* The libsecp256k1 module expects fixed length arrays as arguments wherever possible, so we
+ * add a helper here to cast vectors and the CKey, CPubKey containers to fixed length arrays.
+ *
+ * note, this is a simplified version specific to the silent payments use case. if we were to prefer
+ * the new API convention for all of libsecp , this could be pulled out into its own helper designed
+ * to handle the full libsecp256k1 API
+ */
+template <size_t L, typename T>
+auto CastToFixedLenArray(T&& t)
+    -> std::conditional_t<
+        std::is_const<std::remove_pointer_t<std::decay_t<T>>>::value,
+        const unsigned char (*)[L],
+        unsigned char (*)[L]
+    >
+{
+    using DecayedT = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<DecayedT, std::vector<unsigned char>> ||
+                  std::is_same_v<DecayedT, std::vector<std::byte>> ||
+                  std::is_same_v<DecayedT, std::array<unsigned char, L>>) {
+        assert(t.size() == L);
+        return reinterpret_cast<decltype(CastToFixedLenArray<L>(t))>(t.data());
+    } else if constexpr (std::is_same_v<DecayedT, unsigned char*> ||
+                         std::is_same_v<DecayedT, const unsigned char*> ||
+                         std::is_same_v<DecayedT, std::byte*> ||
+                         std::is_same_v<DecayedT, const std::byte*>) {
+        return reinterpret_cast<decltype(CastToFixedLenArray<L>(t))>(t);
+    } else {
+        static_assert(std::is_same_v<DecayedT, void>, "Unsupported type for CastToFixedLenArray");
+    }
+}
+
 class PublicDataImpl
 {
 private:
@@ -143,7 +175,7 @@ std::optional<PublicData> CreateInputPubkeysTweak(
     stream << smallest_outpoint;
     bool ret = secp256k1_silentpayments_recipient_public_data_create(secp256k1_context_static,
         public_data.Get(),
-        smallest_outpoint_ser.data(),
+        CastToFixedLenArray<36>(smallest_outpoint_ser),
         taproot_pubkey_ptrs.data(), taproot_pubkey_ptrs.size(),
         plain_pubkey_ptrs.data(), plain_pubkey_ptrs.size()
     );
@@ -187,7 +219,7 @@ std::optional<CPubKey> GetSerializedSilentPaymentsPublicData(const std::vector<C
     if (!result.has_value()) return std::nullopt;
     ret = secp256k1_silentpayments_recipient_public_data_serialize(
         secp256k1_context_static,
-        (unsigned char *)serialized_public_data.begin(),
+        CastToFixedLenArray<33>((unsigned char*)serialized_public_data.data()),
         result.value().Get()
     );
     assert(ret);
@@ -244,7 +276,7 @@ std::vector<secp256k1_xonly_pubkey> CreateOutputs(
     ret = secp256k1_silentpayments_sender_create_outputs(secp256k1_context_sign,
         generated_output_ptrs.data(),
         recipient_ptrs.data(), recipient_ptrs.size(),
-        smallest_outpoint_ser.data(),
+        CastToFixedLenArray<36>(smallest_outpoint_ser),
         taproot_keypair_ptrs.data(), taproot_keypair_ptrs.size(),
         plain_key_ptrs.data(), plain_key_ptrs.size()
     );
@@ -289,7 +321,7 @@ const unsigned char* LabelLookupCallback(const unsigned char* key, const void* c
 std::pair<CPubKey, uint256> CreateLabelTweak(const CKey& scan_key, const int m) {
     secp256k1_pubkey label_obj;
     unsigned char label_tweak[32];
-    bool ret = secp256k1_silentpayments_recipient_create_label(secp256k1_context_sign, &label_obj, label_tweak, UCharCast(scan_key.data()), m);
+    bool ret = secp256k1_silentpayments_recipient_create_label(secp256k1_context_sign, &label_obj, &label_tweak, CastToFixedLenArray<32>(scan_key.data()), m);
     assert(ret);
     CPubKey label;
     size_t pubkeylen = CPubKey::COMPRESSED_SIZE;
@@ -357,7 +389,7 @@ std::optional<std::vector<SilentPaymentOutput>> ScanForSilentPaymentOutputs(
     ret = secp256k1_silentpayments_recipient_scan_outputs(secp256k1_context_static,
         found_output_ptrs.data(), &n_found_outputs,
         tx_output_ptrs.data(), tx_output_ptrs.size(),
-        UCharCast(scan_key.begin()),
+        CastToFixedLenArray<32>(scan_key.data()),
         public_data.Get(),
         &spend_pubkey_obj,
         LabelLookupCallback,
